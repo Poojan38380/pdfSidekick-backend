@@ -1,0 +1,12 @@
+__pycache__
+
+*.env
+
+*.logs
+*.log
+
+data
+createdData
+.vscode
+
+
