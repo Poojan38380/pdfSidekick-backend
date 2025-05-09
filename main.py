@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 
 from database import get_connection, close_connection, initialize_database
 from api import api_router
-from utils.colorLogger import print_info, print_error
+from utils.colorLogger import print_info, print_error, delete_logs, get_user_input, print_header
 
 # Define lifespan event handlers for startup and shutdown
 @asynccontextmanager
@@ -67,4 +67,9 @@ async def root():
     return {"message": "Welcome to PDFSideKick API"}
 
 if __name__ == "__main__":
+    print_header("Welcome to the PDFSideKick API")
+    print_info("Do you want to clear logs? (y/n)")
+    choice = get_user_input("Enter your choice: ")
+    if choice == "y":
+        delete_logs()
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
