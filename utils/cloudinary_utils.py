@@ -38,6 +38,15 @@ async def upload_pdf_to_cloudinary(file_content, public_id=None):
 
         upload_result = cloudinary.uploader.unsigned_upload(file_content, upload_preset)
 
+        # Create a viewable PDF URL by modifying the secure_url
+        if "secure_url" in upload_result:
+            # Transform the URL to make it viewable instead of downloadable
+            # Format: /image/upload/ -> /image/upload/fl_attachment:false/
+            viewable_url = upload_result["secure_url"].replace(
+                "/upload/", "/upload/fl_attachment:false/"
+            )
+            upload_result["viewable_url"] = viewable_url
+
         return upload_result
     except cloudinary.exceptions.Error as ce:
         print_error(ce)

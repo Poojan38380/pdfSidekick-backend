@@ -4,7 +4,7 @@ import uuid
 from database import get_pdfs_by_user_id, get_pdf_by_id, get_user_by_id, create_pdf
 from schemas import PDFResponse
 from utils.cloudinary_utils import upload_pdf_to_cloudinary
-from utils.colorLogger import print_error
+from utils.colorLogger import print_error, print_info
 
 # Configure logging
 
@@ -44,7 +44,7 @@ async def create_new_pdf(
 
         try:
             upload_result = await upload_pdf_to_cloudinary(file_content)
-            print(upload_result)
+            print_info(upload_result)
             document_link = upload_result["secure_url"]
 
         except Exception as cloud_error:
