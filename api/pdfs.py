@@ -82,7 +82,16 @@ async def get_user_pdfs(user_id: str, request: Request) -> List[Dict[str, Any]]:
     """
     pool = request.app.state.db_pool
     
+   
+
     try:
+
+        user = await get_user_by_id(pool, user_id)
+        if not user:
+            raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+            )
         pdfs = await get_pdfs_by_user_id(pool, user_id)
         return pdfs
     except Exception as e:
