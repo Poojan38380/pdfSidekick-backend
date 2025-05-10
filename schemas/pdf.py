@@ -12,10 +12,13 @@ class PDFCreate(PDFBase):
     user_id: str
     
 class PDFResponse(PDFBase):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    created_at: datetime = Field(default_factory=datetime.now)
-    updated_at: datetime = Field(default_factory=datetime.now)
+    id: str
+    created_at: datetime
+    updated_at: datetime
     user_id: str
     
     class Config:
-        from_attributes = True 
+        from_attributes = True
+        json_encoders = {
+            uuid.UUID: str
+        } 

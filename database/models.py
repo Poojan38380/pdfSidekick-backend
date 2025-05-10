@@ -75,7 +75,10 @@ async def create_pdf(pool, title: str, description: str,
             title, description, document_link, user_id
         )
         
-        return dict(pdf)
+        # Convert the record to a dict and ensure UUID is converted to string
+        pdf_dict = dict(pdf)
+        pdf_dict['id'] = str(pdf_dict['id'])
+        return pdf_dict
 
 async def get_pdfs_by_user_id(pool, user_id: str) -> List[Dict[str, Any]]:
     """Get all PDFs associated with a user"""
@@ -88,7 +91,8 @@ async def get_pdfs_by_user_id(pool, user_id: str) -> List[Dict[str, Any]]:
             user_id
         )
         
-        return [dict(pdf) for pdf in pdfs]
+        # Convert records to dicts and ensure UUIDs are converted to strings
+        return [dict(pdf, id=str(pdf['id'])) for pdf in pdfs]
 
 async def get_pdf_by_id(pool, pdf_id: str) -> Optional[Dict[str, Any]]:
     """Get a PDF by ID"""
@@ -101,4 +105,8 @@ async def get_pdf_by_id(pool, pdf_id: str) -> Optional[Dict[str, Any]]:
             pdf_id
         )
         
-        return dict(pdf) if pdf else None 
+        if pdf:
+            pdf_dict = dict(pdf)
+            pdf_dict['id'] = str(pdf_dict['id'])
+            return pdf_dict
+        return None 

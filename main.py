@@ -1,6 +1,7 @@
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 
 from database import get_connection, close_connection, initialize_database
@@ -39,6 +40,9 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan
 )
+
+# Mount static files directory
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 # Configure CORS
 origins = [

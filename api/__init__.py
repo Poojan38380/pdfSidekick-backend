@@ -4,6 +4,13 @@ from .pdfs import router as pdfs_router
 
 api_router = APIRouter()
 
+
+
+@api_router.get("/")
+async def root():
+    return {"message": "Welcome to API routes"}
+
+
 # # api_router.include_router(users_router, prefix="/users", tags=["Users"])
 api_router.include_router(pdfs_router, prefix="/pdfs", tags=["PDFs"])
 
