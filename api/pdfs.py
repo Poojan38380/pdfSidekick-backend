@@ -44,7 +44,6 @@ async def create_new_pdf(
 
         try:
             upload_result = await upload_pdf_to_cloudinary(file_content)
-            print_info(upload_result)
             document_link = upload_result["secure_url"]
 
         except Exception as cloud_error:
