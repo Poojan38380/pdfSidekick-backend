@@ -24,7 +24,15 @@ pip install -r requirements.txt
 
 ```
 DATABASE_URL=your_neondb_connection_string
+
+# Cloudinary configuration
+CLOUDINARY_CLOUD_NAME=your_cloud_name
+CLOUDINARY_API_KEY=your_api_key
+CLOUDINARY_API_SECRET=your_api_secret
+CLOUDINARY_UPLOAD_PRESET=your_upload_preset
 ```
+
+You can obtain your Cloudinary credentials by signing up at [Cloudinary](https://cloudinary.com/) and accessing your dashboard. For the upload preset, you can create one in your Cloudinary dashboard under Settings > Upload > Upload presets.
 
 ## Running the Application
 
@@ -63,13 +71,13 @@ Once the server is running, you can access the API documentation at:
 - `updated_at`: Timestamp
 - `title`: String
 - `description`: String
-- `document_link`: String
+- `document_link`: String (Cloudinary URL)
 - `user_id`: UUID (foreign key to User)
 
 ## API Endpoints
 
 ### PDFs
 
-- `POST /api/pdfs` - Create a new PDF document entry
+- `POST /api/pdfs/upload` - Upload a new PDF document to Cloudinary
 - `GET /api/pdfs/user/{user_id}` - Get all PDFs for a specific user
 - `GET /api/pdfs/{pdf_id}` - Get details of a specific PDF

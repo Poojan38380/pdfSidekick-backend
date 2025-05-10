@@ -1,19 +1,13 @@
 from fastapi import APIRouter, HTTPException, status, Request, UploadFile, File, Form
 from typing import Dict, Any, List
-import os
-import shutil
-from datetime import datetime
 import uuid
-
 from database import get_pdfs_by_user_id, get_pdf_by_id, get_user_by_id, create_pdf
 from schemas import PDFResponse
+from utils.cloudinary_utils import upload_pdf_to_cloudinary
+
+# Configure logging
 
 router = APIRouter()
-
-# Create uploads directory if it doesn't exist
-UPLOADS_DIR = "uploads"
-if not os.path.exists(UPLOADS_DIR):
-    os.makedirs(UPLOADS_DIR)
 
 @router.post("/upload", response_model=PDFResponse)
 async def create_new_pdf(
@@ -24,7 +18,7 @@ async def create_new_pdf(
     user_id: str = Form(...)
 )->PDFResponse:
     """
-    Saves the uploaded PDF to the server and saves the metadata to the database.
+    Uploads the PDF to Cloudinary and saves the metadata to the database.
     """
     # Validate file type
     if not file.filename.lower().endswith('.pdf'):
@@ -43,33 +37,57 @@ async def create_new_pdf(
         )
 
     try:
-        # Generate unique filename
-        file_extension = os.path.splitext(file.filename)[1]
-        unique_filename = f"{uuid.uuid4()}{file_extension}"
-        file_path = os.path.join(UPLOADS_DIR, unique_filename)
-
-        # Save file
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-
-        # Create document link (relative path)
-        document_link = f"/uploads/{unique_filename}"
+        
+        # Read file content
+        file_content = await file.read()
+        
+        if len(file_content) == 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Empty file uploaded"
+            )
+        
+        # Generate unique ID for the file
+        unique_id = str(uuid.uuid4())
+        
+        # Upload to Cloudinary
+        try:
+            upload_result = await upload_pdf_to_cloudinary(
+                file_content, 
+                public_id=f"{unique_id}"
+            )
+            
+            # Get the secure URL from the upload result
+            document_link = upload_result['secure_url']
+            
+        except Exception as cloud_error:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error uploading to cloud storage: {str(cloud_error)}"
+            )
 
         # Save to database
-        pdf_data = await create_pdf(
-            pool=pool,
-            title=title,
-            description=description,
-            document_link=document_link,
-            user_id=user_id
-        )
+        try:
+            pdf_data = await create_pdf(
+                pool=pool,
+                title=title,
+                description=description,
+                document_link=document_link,
+                user_id=user_id
+            )
+            
+            return pdf_data
+            
+        except Exception as db_error:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error saving to database: {str(db_error)}"
+            )
 
-        return pdf_data
-
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
     except Exception as e:
-        # Clean up file if database operation fails
-        if os.path.exists(file_path):
-            os.remove(file_path)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error uploading PDF: {str(e)}"
