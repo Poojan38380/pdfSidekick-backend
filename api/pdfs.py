@@ -4,6 +4,7 @@ import uuid
 from database import get_pdfs_by_user_id, get_pdf_by_id, get_user_by_id, create_pdf
 from schemas import PDFResponse
 from utils.cloudinary_utils import upload_pdf_to_cloudinary
+from utils.colorLogger import print_error
 
 # Configure logging
 
@@ -43,7 +44,7 @@ async def create_new_pdf(
 
         try:
             upload_result = await upload_pdf_to_cloudinary(file_content)
-
+            print(upload_result)
             document_link = upload_result["secure_url"]
 
         except Exception as cloud_error:
@@ -64,6 +65,7 @@ async def create_new_pdf(
             return pdf_data
 
         except Exception as db_error:
+            print_error(db_error)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Error saving to database: {str(db_error)}",
@@ -72,6 +74,7 @@ async def create_new_pdf(
     except HTTPException:
         raise
     except Exception as e:
+        print_error(e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error uploading PDF: {str(e)}",
@@ -95,6 +98,7 @@ async def get_user_pdfs(user_id: str, request: Request) -> List[Dict[str, Any]]:
         pdfs = await get_pdfs_by_user_id(pool, user_id)
         return pdfs
     except Exception as e:
+        print_error(e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error retrieving PDFs: {str(e)}",
@@ -120,6 +124,7 @@ async def get_pdf_details(pdf_id: str, request: Request) -> Dict[str, Any]:
     except HTTPException:
         raise
     except Exception as e:
+        print_error(e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error retrieving PDF: {str(e)}",

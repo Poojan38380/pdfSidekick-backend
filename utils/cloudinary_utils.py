@@ -2,6 +2,7 @@ import cloudinary
 import cloudinary.uploader
 import os
 from dotenv import load_dotenv
+from utils.colorLogger import print_error
 
 load_dotenv()
 
@@ -39,10 +40,14 @@ async def upload_pdf_to_cloudinary(file_content, public_id=None):
 
         return upload_result
     except cloudinary.exceptions.Error as ce:
+        print_error(ce)
         raise Exception(f"Cloudinary upload failed: {str(ce)}")
     except ValueError as ve:
+        print_error(ve)
         raise Exception(f"Invalid input: {str(ve)}")
+
     except Exception as e:
+        print_error(e)
         raise Exception(f"Cloudinary upload failed: {str(e)}")
 
 
@@ -61,4 +66,5 @@ async def delete_pdf_from_cloudinary(public_id):
         deletion_result = cloudinary.uploader.destroy(public_id, resource_type="raw")
         return deletion_result
     except Exception as e:
+        print_error(e)
         raise Exception(f"Cloudinary deletion failed: {str(e)}")
