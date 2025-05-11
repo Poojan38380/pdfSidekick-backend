@@ -31,6 +31,23 @@ CREATE TABLE IF NOT EXISTS public.PdfChunk (
 );
 """
 
+CREATE_PDF_EMBEDDINGS_TABLE = """
+CREATE TABLE IF NOT EXISTS public.PdfEmbedding (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    pdf_id UUID NOT NULL REFERENCES public.Pdf(id) ON DELETE CASCADE,
+    chunk_id UUID NOT NULL REFERENCES public.PdfChunk(id) ON DELETE CASCADE,
+    embedding vector(1536),
+    embedding_model TEXT NOT NULL
+);
+"""
+
+CREATE_PDF_EMBEDDINGS_INDEX = """
+CREATE INDEX IF NOT EXISTS pdf_embeddings_hnsw_idx 
+ON public.PdfEmbedding USING hnsw (embedding vector_cosine_ops) 
+WITH (m = 16, ef_construction = 64);
+"""
+
 
 # Function to initialize the database
 async def initialize_database(connection):
@@ -39,6 +56,7 @@ async def initialize_database(connection):
     # Create tables
     await connection.execute(CREATE_PDFS_TABLE)
     await connection.execute(CREATE_PDF_CHUNKS_TABLE)
+    await connection.execute(CREATE_PDF_EMBEDDINGS_TABLE)
 
     # Create trigger for updating the updated_at columns
     update_timestamp_trigger = """
@@ -61,6 +79,14 @@ async def initialize_database(connection):
 
     await connection.execute(update_timestamp_trigger)
     await connection.execute(create_pdf_trigger)
+
+    # Enable pgvector extension if not already enabled
+    try:
+        await connection.execute("CREATE EXTENSION IF NOT EXISTS vector;")
+        # Create vector index
+        await connection.execute(CREATE_PDF_EMBEDDINGS_INDEX)
+    except Exception as e:
+        print(f"Error creating vector extension or index: {e}")
 
 
 async def get_user_by_id(pool, user_id: str) -> Optional[Dict[str, Any]]:
@@ -256,3 +282,107 @@ async def get_pdf_chunks(pool, pdf_id: str) -> List[Dict[str, Any]]:
             dict(chunk, id=str(chunk["id"]), pdf_id=str(chunk["pdf_id"]))
             for chunk in chunks
         ]
+
+
+async def create_pdf_embedding(
+    pool,
+    pdf_id: str,
+    chunk_id: str,
+    embedding: List[float],
+    embedding_model: str = "text-embedding-3-small",
+) -> Dict[str, Any]:
+    """Create a new PDF embedding entry in the database"""
+
+    # Convert embedding list to PostgreSQL vector format
+    embedding_str = f"[{','.join(map(str, embedding))}]"
+
+    async with pool.acquire() as conn:
+        embedding_record = await conn.fetchrow(
+            """
+            INSERT INTO public.PdfEmbedding (pdf_id, chunk_id, embedding, embedding_model)
+            VALUES ($1, $2, $3::vector, $4)
+            RETURNING id, created_at, pdf_id, chunk_id, embedding_model
+            """,
+            pdf_id,
+            chunk_id,
+            embedding_str,
+            embedding_model,
+        )
+
+        embedding_dict = dict(embedding_record)
+        embedding_dict["id"] = str(embedding_dict["id"])
+        embedding_dict["pdf_id"] = str(embedding_dict["pdf_id"])
+        embedding_dict["chunk_id"] = str(embedding_dict["chunk_id"])
+        return embedding_dict
+
+
+async def get_pdf_embeddings(pool, pdf_id: str) -> List[Dict[str, Any]]:
+    """Get all embeddings for a specific PDF"""
+
+    async with pool.acquire() as conn:
+        embeddings = await conn.fetch(
+            """
+            SELECT id, created_at, pdf_id, chunk_id, embedding_model
+            FROM public.PdfEmbedding 
+            WHERE pdf_id = $1
+            """,
+            pdf_id,
+        )
+
+        return [
+            dict(
+                embedding,
+                id=str(embedding["id"]),
+                pdf_id=str(embedding["pdf_id"]),
+                chunk_id=str(embedding["chunk_id"]),
+            )
+            for embedding in embeddings
+        ]
+
+
+async def search_similar_chunks(
+    pool, query_embedding: List[float], limit: int = 5, threshold: float = 0.7
+) -> List[Dict[str, Any]]:
+    """
+    Search for similar chunks using vector similarity search
+
+    Args:
+        pool: Database connection pool
+        query_embedding: The query embedding vector
+        limit: Maximum number of results to return
+        threshold: Minimum similarity threshold (0-1)
+
+    Returns:
+        List of similar chunks with similarity scores
+    """
+    # Convert embedding list to PostgreSQL vector format
+    embedding_str = f"[{','.join(map(str, query_embedding))}]"
+
+    async with pool.acquire() as conn:
+        results = await conn.fetch(
+            """
+            SELECT 
+                e.id as embedding_id,
+                e.pdf_id,
+                e.chunk_id,
+                c.content,
+                c.page_number,
+                c.metadata,
+                p.title,
+                1 - (e.embedding <=> $1::vector) as similarity
+            FROM 
+                public.PdfEmbedding e
+                JOIN public.PdfChunk c ON e.chunk_id = c.id
+                JOIN public.Pdf p ON e.pdf_id = p.id
+            WHERE 
+                1 - (e.embedding <=> $1::vector) > $2
+            ORDER BY 
+                similarity DESC
+            LIMIT $3
+            """,
+            embedding_str,
+            threshold,
+            limit,
+        )
+
+        return [dict(result) for result in results]

@@ -7,6 +7,7 @@ from fastapi import (
     File,
     Form,
     BackgroundTasks,
+    Query,
 )
 from typing import Dict, Any, List
 import uuid
@@ -18,10 +19,11 @@ from database import (
     get_pdf_chunks,
     update_pdf_processing_status,
 )
-from schemas import PDFResponse, PDFChunkResponse
+from schemas import PDFResponse, PDFChunkResponse, SearchResponse
 from utils.cloudinary_utils import upload_pdf_to_cloudinary
 from utils.colorLogger import print_error, print_info
 from utils.pdf_processor import process_pdf_with_progress
+from utils.vector_db import semantic_search, process_pdf_chunks_to_embeddings
 
 # Configure logging
 
@@ -276,4 +278,99 @@ async def reprocess_pdf(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error reprocessing PDF: {str(e)}",
+        )
+
+
+@router.post("/{pdf_id}/generate-embeddings")
+async def generate_pdf_embeddings(
+    pdf_id: str, request: Request, background_tasks: BackgroundTasks
+) -> Dict[str, Any]:
+    """
+    Generate embeddings for a PDF that has been processed
+    """
+    pool = request.app.state.db_pool
+
+    try:
+        # Check if the PDF exists
+        pdf = await get_pdf_by_id(pool, pdf_id)
+        if not pdf:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="PDF not found"
+            )
+
+        # Check if the PDF has been processed
+        if pdf.get("processing_status") not in [
+            "completed",
+            "completed_without_embeddings",
+        ]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"PDF must be fully processed before generating embeddings. Current status: {pdf.get('processing_status')}",
+            )
+
+        # Update processing status to embedding
+        updated_pdf = await update_pdf_processing_status(
+            pool, pdf_id, "embedding", 80, None, None
+        )
+
+        # Start background embedding generation
+        background_tasks.add_task(process_pdf_chunks_to_embeddings, pool, pdf_id)
+
+        print_info(f"PDF {pdf_id} queued for embedding generation")
+
+        return {
+            "id": updated_pdf["id"],
+            "processing_status": updated_pdf["processing_status"],
+            "processing_progress": updated_pdf["processing_progress"],
+            "message": "PDF queued for embedding generation",
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print_error(e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error generating embeddings: {str(e)}",
+        )
+
+
+@router.get("/search")
+async def search_pdfs(
+    request: Request,
+    query: str,
+    limit: int = Query(5, ge=1, le=20),
+    threshold: float = Query(0.7, ge=0, le=1.0),
+) -> SearchResponse:
+    """
+    Search PDFs using semantic search
+    """
+    pool = request.app.state.db_pool
+
+    try:
+        # Perform semantic search
+        results = await semantic_search(pool, query, limit, threshold)
+
+        # Format the results
+        search_results = []
+        for result in results:
+            search_results.append(
+                {
+                    "pdf_id": str(result["pdf_id"]),
+                    "pdf_title": result["title"],
+                    "chunk_id": str(result["chunk_id"]),
+                    "content": result["content"],
+                    "page_number": result["page_number"],
+                    "similarity": result["similarity"],
+                    "metadata": result["metadata"] if result["metadata"] else {},
+                }
+            )
+
+        return {"query": query, "results": search_results, "count": len(search_results)}
+
+    except Exception as e:
+        print_error(f"Error performing search: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error performing search: {str(e)}",
         )

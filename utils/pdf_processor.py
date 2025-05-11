@@ -7,6 +7,7 @@ import aiohttp
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from utils.colorLogger import print_info, print_error
 from utils.ocr_utils import extract_text_with_ocr_fallback
+from utils.vector_db import process_pdf_chunks_to_embeddings
 
 
 async def download_pdf_from_cloudinary(url: str) -> bytes:
@@ -201,7 +202,7 @@ async def process_pdf_with_progress(
 
         # Chunk the text
         chunks = await chunk_text(full_text, chunk_size, chunk_overlap)
-        await update_pdf_processing_status(db_pool, pdf_id, "processing", 80)
+        await update_pdf_processing_status(db_pool, pdf_id, "processing", 70)
 
         # Store chunks in database
         for i, chunk_content in enumerate(chunks):
@@ -224,6 +225,25 @@ async def process_pdf_with_progress(
             await create_pdf_chunk(
                 db_pool, pdf_id, i, chunk_content, page_number, metadata  # chunk_index
             )
+
+        # Generate embeddings for the chunks
+        try:
+            # Start embedding generation
+            print_info(f"Starting embedding generation for PDF {pdf_id}")
+            await process_pdf_chunks_to_embeddings(db_pool, pdf_id)
+        except Exception as embed_error:
+            print_error(f"Error generating embeddings for PDF {pdf_id}: {embed_error}")
+            # Continue processing even if embedding fails
+            # The PDF is still usable without embeddings
+            await update_pdf_processing_status(
+                db_pool,
+                pdf_id,
+                "completed_without_embeddings",
+                100,
+                None,
+                f"Completed processing but embeddings failed: {str(embed_error)}",
+            )
+            return
 
         # Update status to completed
         await update_pdf_processing_status(db_pool, pdf_id, "completed", 100)

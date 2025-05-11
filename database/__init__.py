@@ -16,6 +16,9 @@ from .models import (
     update_pdf_extracted_content,
     create_pdf_chunk,
     get_pdf_chunks,
+    create_pdf_embedding,
+    get_pdf_embeddings,
+    search_similar_chunks,
 )
 
 __all__ = [
@@ -33,4 +36,7 @@ __all__ = [
     "update_pdf_extracted_content",
     "create_pdf_chunk",
     "get_pdf_chunks",
+    "create_pdf_embedding",
+    "get_pdf_embeddings",
+    "search_similar_chunks",
 ]

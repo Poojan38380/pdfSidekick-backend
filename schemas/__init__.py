@@ -6,6 +6,8 @@ from .pdf import (
     PDFChunkBase,
     PDFChunkCreate,
     PDFChunkResponse,
+    SearchResult,
+    SearchResponse,
 )
 
 __all__ = [
@@ -17,4 +19,6 @@ __all__ = [
     "PDFChunkBase",
     "PDFChunkCreate",
     "PDFChunkResponse",
+    "SearchResult",
+    "SearchResponse",
 ]

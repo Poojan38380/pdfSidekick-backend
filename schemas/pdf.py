@@ -48,3 +48,19 @@ class PDFChunkResponse(PDFChunkBase):
     class Config:
         from_attributes = True
         json_encoders = {uuid.UUID: str}
+
+
+class SearchResult(BaseModel):
+    pdf_id: str
+    pdf_title: str
+    chunk_id: str
+    content: str
+    page_number: Optional[int] = None
+    similarity: float
+    metadata: Optional[Dict[str, Any]] = None
+
+
+class SearchResponse(BaseModel):
+    query: str
+    results: List[SearchResult]
+    count: int
