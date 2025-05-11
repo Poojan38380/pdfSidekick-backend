@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS public.PdfEmbedding (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     pdf_id UUID NOT NULL REFERENCES public.Pdf(id) ON DELETE CASCADE,
     chunk_id UUID NOT NULL REFERENCES public.PdfChunk(id) ON DELETE CASCADE,
-    embedding vector(1536),
+    embedding vector(384),
     embedding_model TEXT NOT NULL
 );
 """
