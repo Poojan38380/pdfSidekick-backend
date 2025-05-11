@@ -66,21 +66,13 @@ async def generate_embeddings_batch(
         batch_size = 4  # Reduced batch size to prevent timeouts
         all_embeddings = []
 
-        print_info(
-            f"Generating embeddings for {len(valid_texts)} texts in batches of {batch_size}"
-        )
-
         for i in range(0, len(valid_texts), batch_size):
             batch = valid_texts[i : i + batch_size]
-            print_info(
-                f"Processing batch {i//batch_size + 1}/{(len(valid_texts) + batch_size - 1)//batch_size}"
-            )
 
             # Generate embeddings for the batch
             try:
                 batch_embeddings = await hf_client.get_embeddings_batch(batch, model)
                 all_embeddings.extend(batch_embeddings)
-                print_info(f"Successfully processed batch {i//batch_size + 1}")
             except Exception as e:
                 print_error(
                     f"Error in batch {i//batch_size + 1} (in generate_embeddings_batch): {e}"
@@ -145,17 +137,9 @@ async def process_pdf_chunks_to_embeddings(
         total_chunks = len(chunks)
         embeddings_created = 0
 
-        print_info(
-            f"Starting embedding generation for {total_chunks} chunks from PDF {pdf_id}"
-        )
-
         for i in range(0, total_chunks, batch_size):
             batch_chunks = chunks[i : i + batch_size]
             texts = [chunk["content"] for chunk in batch_chunks]
-
-            print_info(
-                f"Processing batch {i//batch_size + 1}/{(total_chunks + batch_size - 1)//batch_size}"
-            )
 
             try:
                 # Generate embeddings for the batch
@@ -199,10 +183,6 @@ async def process_pdf_chunks_to_embeddings(
                 "generating_embeddings",
                 total_chunks,
                 embeddings_created,
-            )
-
-            print_info(
-                f"Progress: {min(progress, 99):.1f}% - Created {embeddings_created}/{total_chunks} embeddings"
             )
 
             # Small delay to avoid overwhelming the API
