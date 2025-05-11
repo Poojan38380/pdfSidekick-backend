@@ -1,4 +1,5 @@
 from typing import Dict, Any, Optional, List
+import json
 
 
 CREATE_PDFS_TABLE = """
@@ -149,25 +150,25 @@ async def update_pdf_processing_status(
     param_count = 2
 
     if progress is not None:
-        query_parts.append(f"processing_progress = ${param_count}")
+        query_parts.append(f", processing_progress = ${param_count}")
         params.append(progress)
         param_count += 1
 
     if total_pages is not None:
-        query_parts.append(f"total_pages = ${param_count}")
+        query_parts.append(f", total_pages = ${param_count}")
         params.append(total_pages)
         param_count += 1
 
     if error_message is not None:
-        query_parts.append(f"error_message = ${param_count}")
+        query_parts.append(f", error_message = ${param_count}")
         params.append(error_message)
         param_count += 1
 
-    query_parts.append(f"WHERE id = ${param_count}")
+    query_parts.append(f" WHERE id = ${param_count}")
     params.append(pdf_id)
 
     query = (
-        " , ".join(query_parts)
+        "".join(query_parts)
         + " RETURNING id, processing_status, processing_progress, total_pages, error_message"
     )
 
@@ -214,18 +215,24 @@ async def create_pdf_chunk(
 ) -> Dict[str, Any]:
     """Create a new PDF chunk entry in the database"""
 
+    # Convert metadata dict to JSON string for PostgreSQL JSONB
+    if metadata is not None:
+        metadata_json = json.dumps(metadata)
+    else:
+        metadata_json = None
+
     async with pool.acquire() as conn:
         chunk = await conn.fetchrow(
             """
             INSERT INTO public.PdfChunk (pdf_id, chunk_index, page_number, content, metadata)
-            VALUES ($1, $2, $3, $4, $5)
+            VALUES ($1, $2, $3, $4, $5::jsonb)
             RETURNING id, created_at, pdf_id, chunk_index, page_number, content, metadata
             """,
             pdf_id,
             chunk_index,
             page_number,
             content,
-            metadata,
+            metadata_json,
         )
 
         chunk_dict = dict(chunk)
