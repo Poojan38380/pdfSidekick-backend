@@ -2,6 +2,8 @@ import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+import time
+from datetime import datetime
 
 from database import (
     get_connection,
@@ -16,6 +18,9 @@ from utils.colorLogger import (
     get_user_input,
     print_header,
 )
+
+# Store server start time
+start_time = time.time()
 
 
 # Define lifespan event handlers for startup and shutdown
@@ -80,6 +85,30 @@ app.include_router(api_router, prefix="/api")
 @app.get("/")
 async def root():
     return {"message": "Welcome to PDFSideKick API"}
+
+
+# Health check endpoint
+@app.get("/health")
+async def health_check(request: Request):
+    current_time = time.time()
+    uptime_seconds = current_time - start_time
+
+    # Check database connection
+    db_status = "healthy"
+    try:
+        db_pool = request.app.state.db_pool
+        async with db_pool.acquire() as conn:
+            await conn.execute("SELECT 1")
+    except Exception as e:
+        db_status = f"unhealthy: {str(e)}"
+
+    return {
+        "status": "healthy",
+        "timestamp": datetime.utcnow().isoformat(),
+        "version": app.version,
+        "uptime_seconds": uptime_seconds,
+        "database": db_status,
+    }
 
 
 if __name__ == "__main__":
