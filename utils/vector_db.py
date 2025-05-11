@@ -32,6 +32,10 @@ async def generate_embedding(
         List of floats representing the embedding vector
     """
     try:
+        if not text or len(text.strip()) == 0:
+            print_error("Empty text provided for embedding generation")
+            return []
+
         return await hf_client.get_embedding(text, model)
     except Exception as e:
         print_error(f"Error generating embedding: {e}")
@@ -52,19 +56,38 @@ async def generate_embeddings_batch(
         List of embedding vectors
     """
     try:
+        # Filter out empty texts
+        valid_texts = [text for text in texts if text and len(text.strip()) > 0]
+        if not valid_texts:
+            print_error("No valid texts provided for batch embedding generation")
+            return []
+
         # Process in smaller batches to avoid overloading the API
-        batch_size = 8
+        batch_size = 4  # Reduced batch size to prevent timeouts
         all_embeddings = []
 
-        for i in range(0, len(texts), batch_size):
-            batch = texts[i : i + batch_size]
+        print_info(
+            f"Generating embeddings for {len(valid_texts)} texts in batches of {batch_size}"
+        )
+
+        for i in range(0, len(valid_texts), batch_size):
+            batch = valid_texts[i : i + batch_size]
+            print_info(
+                f"Processing batch {i//batch_size + 1}/{(len(valid_texts) + batch_size - 1)//batch_size}"
+            )
 
             # Generate embeddings for the batch
-            batch_embeddings = await hf_client.get_embeddings_batch(batch, model)
-            all_embeddings.extend(batch_embeddings)
+            try:
+                batch_embeddings = await hf_client.get_embeddings_batch(batch, model)
+                all_embeddings.extend(batch_embeddings)
+                print_info(f"Successfully processed batch {i//batch_size + 1}")
+            except Exception as e:
+                print_error(f"Error in batch {i//batch_size + 1}: {e}")
+                # Continue with next batch instead of failing completely
+                continue
 
             # Add a small delay to avoid rate limiting
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(1.0)
 
         return all_embeddings
     except Exception as e:
@@ -104,24 +127,51 @@ async def process_pdf_chunks_to_embeddings(
         await update_pdf_processing_status(db_pool, pdf_id, "embedding", 80, None, None)
 
         # Process chunks in batches to avoid rate limits
-        batch_size = 8  # Smaller batch size for Hugging Face API
+        batch_size = 4  # Smaller batch size for Hugging Face API
         total_chunks = len(chunks)
         embeddings_created = 0
+
+        print_info(
+            f"Starting embedding generation for {total_chunks} chunks from PDF {pdf_id}"
+        )
 
         for i in range(0, total_chunks, batch_size):
             batch_chunks = chunks[i : i + batch_size]
             texts = [chunk["content"] for chunk in batch_chunks]
 
-            # Generate embeddings for the batch
-            embeddings = await generate_embeddings_batch(texts, model)
+            print_info(
+                f"Processing batch {i//batch_size + 1}/{(total_chunks + batch_size - 1)//batch_size}"
+            )
 
-            # Store embeddings in the database
-            for j, embedding in enumerate(embeddings):
-                chunk = batch_chunks[j]
-                await create_pdf_embedding(
-                    db_pool, pdf_id, chunk["id"], embedding, model
+            try:
+                # Generate embeddings for the batch
+                embeddings = await generate_embeddings_batch(texts, model)
+
+                # Verify we got the expected number of embeddings
+                if len(embeddings) != len(batch_chunks):
+                    print_error(
+                        f"Mismatch in batch {i//batch_size + 1}: got {len(embeddings)} embeddings for {len(batch_chunks)} chunks"
+                    )
+                    continue
+
+                # Store embeddings in the database
+                for j, embedding in enumerate(embeddings):
+                    chunk = batch_chunks[j]
+                    try:
+                        await create_pdf_embedding(
+                            db_pool, pdf_id, chunk["id"], embedding, model
+                        )
+                        embeddings_created += 1
+                    except Exception as db_error:
+                        print_error(
+                            f"Error storing embedding for chunk {chunk['id']}: {db_error}"
+                        )
+                        continue
+            except Exception as batch_error:
+                print_error(
+                    f"Error processing batch {i//batch_size + 1}: {batch_error}"
                 )
-                embeddings_created += 1
+                continue
 
             # Update progress
             progress = 80 + (20 * (i + len(batch_chunks)) / total_chunks)
@@ -134,11 +184,44 @@ async def process_pdf_chunks_to_embeddings(
                 None,
             )
 
-            # Small delay to avoid overwhelming the API
-            await asyncio.sleep(1.0)  # Longer delay for Hugging Face API
+            print_info(
+                f"Progress: {min(progress, 99):.1f}% - Created {embeddings_created}/{total_chunks} embeddings"
+            )
 
-        # Update status to completed
-        await update_pdf_processing_status(db_pool, pdf_id, "completed", 100)
+            # Small delay to avoid overwhelming the API
+            await asyncio.sleep(1.0)
+
+        # Update status based on how many embeddings were created
+        if embeddings_created == 0:
+            await update_pdf_processing_status(
+                db_pool,
+                pdf_id,
+                "failed",
+                None,
+                None,
+                "Failed to generate any embeddings",
+            )
+            return {
+                "status": "failed",
+                "pdf_id": pdf_id,
+                "chunks_processed": total_chunks,
+                "embeddings_created": 0,
+            }
+        elif embeddings_created < total_chunks:
+            await update_pdf_processing_status(
+                db_pool,
+                pdf_id,
+                "completed_partial",
+                100,
+                None,
+                f"Generated {embeddings_created}/{total_chunks} embeddings",
+            )
+        else:
+            await update_pdf_processing_status(db_pool, pdf_id, "completed", 100)
+
+        print_info(
+            f"Embedding generation completed for PDF {pdf_id}: {embeddings_created}/{total_chunks} embeddings created"
+        )
 
         return {
             "status": "completed",
@@ -182,11 +265,16 @@ async def semantic_search(
         # Generate embedding for the query
         query_embedding = await generate_embedding(query)
 
+        if not query_embedding:
+            print_error("Failed to generate embedding for query")
+            return []
+
         # Search for similar chunks
         results = await search_similar_chunks(
             db_pool, query_embedding, limit, threshold
         )
 
+        print_info(f"Semantic search for '{query}' found {len(results)} results")
         return results
 
     except Exception as e:

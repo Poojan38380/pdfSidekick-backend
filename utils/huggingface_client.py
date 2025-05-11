@@ -1,10 +1,13 @@
 import os
 import json
 import aiohttp
+import asyncio
 import numpy as np
 from typing import List, Dict, Any, Union, Optional
 from dotenv import load_dotenv
 from utils.colorLogger import print_info, print_error
+import tenacity
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 # Load environment variables
 load_dotenv()
@@ -37,8 +40,54 @@ class AsyncHuggingFaceClient:
         if not self.api_token:
             raise ValueError("Hugging Face API token is required")
         self.model = model
-        self.headers = {"Authorization": f"Bearer {self.api_token}"}
+        self.headers = {
+            "Authorization": f"Bearer {self.api_token}",
+            "Content-Type": "application/json",
+        }
+        self.timeout = aiohttp.ClientTimeout(total=30)  # 30 second timeout
         print_info(f"Initialized Hugging Face client with model: {self.model}")
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        reraise=True,
+    )
+    async def _make_request(self, url: str, payload: dict) -> Any:
+        """
+        Make a request to the Hugging Face API with retry logic
+
+        Args:
+            url: API endpoint URL
+            payload: Request payload
+
+        Returns:
+            API response
+        """
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    url, headers=self.headers, json=payload, timeout=self.timeout
+                ) as response:
+                    if response.status == 504:
+                        print_error(
+                            f"Gateway timeout from Hugging Face API, retrying..."
+                        )
+                        raise tenacity.TryAgain()
+
+                    if response.status != 200:
+                        error_text = await response.text()
+                        print_error(f"Error from Hugging Face API: {error_text}")
+                        raise Exception(f"Hugging Face API error: {response.status}")
+
+                    return await response.json()
+        except asyncio.TimeoutError:
+            print_error("Request timed out, retrying...")
+            raise tenacity.TryAgain()
+        except Exception as e:
+            if isinstance(e, tenacity.TryAgain):
+                raise
+            print_error(f"Request failed: {str(e)}")
+            raise
 
     async def get_embedding(self, text: str, model: str = None) -> List[float]:
         """
@@ -49,8 +98,34 @@ class AsyncHuggingFaceClient:
         Returns:
             List of floats representing the embedding
         """
-        embeddings = await self.get_embeddings_batch([text], model)
-        return embeddings[0] if embeddings else []
+        if not text:
+            return []
+
+        model_name = model or self.model
+        url = f"{HF_API_BASE_URL}/{model_name}"
+
+        # Prepare the payload with the correct format
+        payload = {
+            "inputs": text,
+            "options": {"wait_for_model": True, "use_cache": True},
+        }
+
+        try:
+            result = await self._make_request(url, payload)
+
+            # Handle different response formats
+            if isinstance(result, list):
+                if isinstance(result[0], list):
+                    # Token-level embeddings need pooling
+                    result = np.mean(result, axis=0).tolist()
+                elif len(result) == 1 and isinstance(result[0], (list, np.ndarray)):
+                    # Single embedding in a list
+                    result = result[0]
+
+            return result
+        except Exception as e:
+            print_error(f"Error getting embedding: {str(e)}")
+            raise
 
     async def get_embeddings_batch(
         self, texts: List[str], model: str = None
@@ -71,94 +146,56 @@ class AsyncHuggingFaceClient:
 
         # Maximum number of texts to send in a single batch
         # For longer texts or large batches, processing can time out
-        MAX_BATCH_SIZE = 8
+        MAX_BATCH_SIZE = 4  # Reduced batch size to prevent timeouts
 
         try:
-            async with aiohttp.ClientSession() as session:
-                all_embeddings = []
+            all_embeddings = []
 
-                # Process texts in batches to avoid timeouts
-                for i in range(0, len(texts), MAX_BATCH_SIZE):
-                    batch = texts[i : i + MAX_BATCH_SIZE]
+            # Process texts in batches to avoid timeouts
+            for i in range(0, len(texts), MAX_BATCH_SIZE):
+                batch = texts[i : i + MAX_BATCH_SIZE]
 
-                    # Different models require different payload formats
-                    if "sentence-transformers" in model_name:
-                        # Process texts one by one for sentence-transformers
-                        batch_embeddings = []
-                        for text in batch:
-                            # For feature extraction (not similarity)
-                            payload = {"inputs": text, "task": "feature-extraction"}
-                            print_info(
-                                f"Sending request to {url} with feature-extraction task"
-                            )
+                # Prepare payload
+                payload = {
+                    "inputs": batch,
+                    "options": {"wait_for_model": True, "use_cache": True},
+                }
 
-                            async with session.post(
-                                url, headers=self.headers, json=payload
-                            ) as response:
-                                if response.status != 200:
-                                    error_text = await response.text()
-                                    print_error(
-                                        f"Error from Hugging Face API: {error_text}"
-                                    )
-                                    response.raise_for_status()
+                print_info(f"Sending batch of {len(batch)} texts to {model_name}")
 
-                                result = await response.json()
-                                batch_embeddings.append(result)
+                result = await self._make_request(url, payload)
 
-                        all_embeddings.extend(batch_embeddings)
-                    else:
-                        # For embedding models like BGE
-                        payload = {"inputs": batch, "options": {"wait_for_model": True}}
-                        print_info(
-                            f"Sending batch of {len(batch)} texts to {model_name}"
-                        )
-
-                        async with session.post(
-                            url, headers=self.headers, json=payload
-                        ) as response:
-                            if response.status != 200:
-                                error_text = await response.text()
-                                print_error(
-                                    f"Error from Hugging Face API: {error_text}"
+                # Handle different response formats
+                if isinstance(result, list):
+                    if len(result) > 0:
+                        if isinstance(result[0], list):
+                            # Direct embeddings list
+                            all_embeddings.extend(result)
+                        elif isinstance(result[0], (dict, float)):
+                            # Could be embedding in dict or a single vector
+                            if isinstance(result[0], dict) and "embedding" in result[0]:
+                                all_embeddings.extend(
+                                    [item["embedding"] for item in result]
                                 )
-                                response.raise_for_status()
-
-                            result = await response.json()
-
-                            # Handle different response formats
-                            if isinstance(result, list):
-                                if len(result) > 0:
-                                    if isinstance(result[0], list):
-                                        # Direct embeddings list
-                                        all_embeddings.extend(result)
-                                    elif isinstance(result[0], (dict, float)):
-                                        # Could be embedding in dict or a single vector
-                                        if (
-                                            isinstance(result[0], dict)
-                                            and "embedding" in result[0]
-                                        ):
-                                            all_embeddings.extend(
-                                                [item["embedding"] for item in result]
-                                            )
-                                        else:
-                                            # Might be a single embedding returned as list of floats
-                                            all_embeddings.append(result)
-                            elif isinstance(result, dict):
-                                if "embeddings" in result:
-                                    all_embeddings.extend(result["embeddings"])
-                                elif "embedding" in result:
-                                    all_embeddings.append(result["embedding"])
                             else:
-                                print_error(f"Unexpected response format: {result}")
+                                # Might be a single embedding returned as list of floats
+                                all_embeddings.append(result)
+                elif isinstance(result, dict):
+                    if "embeddings" in result:
+                        all_embeddings.extend(result["embeddings"])
+                    elif "embedding" in result:
+                        all_embeddings.append(result["embedding"])
+                else:
+                    print_error(f"Unexpected response format: {result}")
 
-                return all_embeddings
+                # Add a small delay to avoid rate limiting
+                await asyncio.sleep(1.0)
 
-        except aiohttp.ClientError as e:
-            print_error(f"Network error when calling Hugging Face API: {str(e)}")
-            return []
+            return all_embeddings
+
         except Exception as e:
-            print_error(f"Error getting embeddings: {str(e)}")
-            return []
+            print_error(f"Error getting batch embeddings: {str(e)}")
+            raise
 
     async def normalize_embeddings(
         self, embeddings: List[List[float]]
