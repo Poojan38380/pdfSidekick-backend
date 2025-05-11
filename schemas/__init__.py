@@ -1,8 +1,24 @@
-from .user import  UserResponse
-from .pdf import PDFCreate, PDFResponse
+from .user import UserBase, UserResponse
+from .pdf import (
+    PDFBase,
+    PDFCreate,
+    PDFResponse,
+    PDFChunkBase,
+    PDFChunkCreate,
+    PDFChunkResponse,
+    SearchResult,
+    SearchResponse,
+)
 
 __all__ = [
-    'UserResponse',
-    'PDFCreate',
-    'PDFResponse'
-] 
+    "UserBase",
+    "UserResponse",
+    "PDFBase",
+    "PDFCreate",
+    "PDFResponse",
+    "PDFChunkBase",
+    "PDFChunkCreate",
+    "PDFChunkResponse",
+    "SearchResult",
+    "SearchResponse",
+]

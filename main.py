@@ -1,12 +1,28 @@
 import uvicorn
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
+import time
+from datetime import datetime
 
-from database import get_connection, close_connection, initialize_database
+from database import (
+    get_connection,
+    close_connection,
+    initialize_database,
+)
 from api import api_router
-from utils.colorLogger import print_info, print_error, delete_logs, get_user_input, print_header
+from utils.colorLogger import (
+    print_info,
+    print_error,
+    delete_logs,
+    get_user_input,
+    print_header,
+)
+from websocket.chat_server import chat_websocket_endpoint
+
+# Store server start time
+start_time = time.time()
+
 
 # Define lifespan event handlers for startup and shutdown
 @asynccontextmanager
@@ -15,13 +31,12 @@ async def lifespan(app: FastAPI):
     try:
         print_info("Starting application")
         db_pool = await get_connection()
-        
+
         # Initialize database with tables
         await initialize_database(db_pool)
-        
+
         app.state.db_pool = db_pool
         print_info("Database initialized")
-        
         yield
     except Exception as e:
         print_error(f"Error during startup: {e}")
@@ -33,16 +48,15 @@ async def lifespan(app: FastAPI):
         if hasattr(app.state, "db_pool"):
             await close_connection(app.state.db_pool)
 
+
 # Create FastAPI application
 app = FastAPI(
     title="PDFSideKick API",
     description="API for PDFSideKick backend",
     version="0.1.0",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
-# Mount static files directory
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 # Configure CORS
 origins = [
@@ -58,17 +72,50 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 # Dependency to get database connection from request
 async def get_db_from_request(request: Request):
     return request.app.state.db_pool
 
+
 # Include API routes
 app.include_router(api_router, prefix="/api")
+
 
 # Root endpoint
 @app.get("/")
 async def root():
     return {"message": "Welcome to PDFSideKick API"}
+
+
+# Health check endpoint
+@app.get("/health")
+async def health_check(request: Request):
+    current_time = time.time()
+    uptime_seconds = current_time - start_time
+
+    # Check database connection
+    db_status = "healthy"
+    try:
+        db_pool = request.app.state.db_pool
+        async with db_pool.acquire() as conn:
+            await conn.execute("SELECT 1")
+    except Exception as e:
+        db_status = f"unhealthy: {str(e)}"
+
+    return {
+        "status": "healthy",
+        "timestamp": datetime.utcnow().isoformat(),
+        "version": app.version,
+        "uptime_seconds": uptime_seconds,
+        "database": db_status,
+    }
+
+
+@app.websocket("/ws/chat/{pdf_id}")
+async def websocket_endpoint(websocket: WebSocket, pdf_id: str):
+    await chat_websocket_endpoint(websocket, pdf_id)
+
 
 if __name__ == "__main__":
     print_header("Welcome to the PDFSideKick API")

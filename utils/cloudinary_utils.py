@@ -3,6 +3,8 @@ import cloudinary.uploader
 import os
 from dotenv import load_dotenv
 from utils.colorLogger import print_error
+import uuid
+from typing import Dict, Any
 
 load_dotenv()
 
@@ -16,48 +18,43 @@ cloudinary.config(
 )
 
 
-async def upload_pdf_to_cloudinary(file_content, public_id=None):
+async def upload_pdf_to_cloudinary(
+    pdf_content: bytes, filename: str = None
+) -> Dict[str, Any]:
     """
     Upload a PDF file to Cloudinary
 
     Args:
-        file_content: The PDF file content
-        public_id: Optional custom public ID for the file
+        pdf_content: PDF file content as bytes
+        filename: Original filename (optional)
 
     Returns:
-        dict: Cloudinary upload response containing URL and other details
+        Cloudinary response with upload details
     """
     try:
-        upload_preset = os.getenv("CLOUDINARY_UPLOAD_PRESET")
+        # Generate a unique filename if none provided
+        if not filename:
+            filename = f"pdf_{uuid.uuid4()}.pdf"
+        elif not filename.lower().endswith(".pdf"):
+            filename = f"{filename}.pdf"
 
-        if not cloud_name:
-            raise ValueError("Cloudinary cloud name is not configured")
+        # Validate file content
+        if len(pdf_content) == 0:
+            raise ValueError("Empty file content")
 
-        if not file_content:
-            raise ValueError("File content is empty")
+        # Upload to Cloudinary
+        response = cloudinary.uploader.upload(
+            pdf_content,
+            resource_type="raw",
+            folder="pdfs",
+            public_id=os.path.splitext(filename)[0],
+            format="pdf",
+        )
 
-        upload_result = cloudinary.uploader.unsigned_upload(file_content, upload_preset)
-
-        # Create a viewable PDF URL by modifying the secure_url
-        if "secure_url" in upload_result:
-            # Transform the URL to make it viewable instead of downloadable
-            # Format: /image/upload/ -> /image/upload/fl_attachment:false/
-            viewable_url = upload_result["secure_url"].replace(
-                "/upload/", "/upload/fl_attachment:false/"
-            )
-            upload_result["viewable_url"] = viewable_url
-
-        return upload_result
-    except cloudinary.exceptions.Error as ce:
-        print_error(ce)
-        raise Exception(f"Cloudinary upload failed: {str(ce)}")
-    except ValueError as ve:
-        print_error(ve)
-        raise Exception(f"Invalid input: {str(ve)}")
-
+        return response
     except Exception as e:
-        print_error(e)
-        raise Exception(f"Cloudinary upload failed: {str(e)}")
+        print_error(f"Error uploading to Cloudinary: {e}")
+        raise
 
 
 async def delete_pdf_from_cloudinary(public_id):
