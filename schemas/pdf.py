@@ -18,11 +18,17 @@ class PDFResponse(PDFBase):
     id: str
     created_at: datetime
     updated_at: datetime
+    title: str
+    description: Optional[str] = None
+    document_link: str
     user_id: str
-    processing_status: Optional[str] = "pending"
+    processing_status: str = "pending"
     processing_progress: Optional[float] = 0
     total_pages: Optional[int] = None
     error_message: Optional[str] = None
+    indexing_step: Optional[str] = None
+    chunks_processed: Optional[int] = None
+    embeddings_created: Optional[int] = None
 
     class Config:
         from_attributes = True

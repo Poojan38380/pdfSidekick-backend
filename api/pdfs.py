@@ -24,6 +24,7 @@ from utils.cloudinary_utils import upload_pdf_to_cloudinary
 from utils.colorLogger import print_error, print_info
 from utils.pdf_processor import process_pdf_with_progress
 from utils.vector_db import semantic_search, process_pdf_chunks_to_embeddings
+from utils.background_jobs import index_pdf_document, get_pdf_indexing_status
 
 # Configure logging
 
@@ -40,62 +41,33 @@ async def create_new_pdf(
     user_id: str = Form(...),
 ) -> PDFResponse:
     """
-    Uploads the PDF to Cloudinary, saves the metadata to the database,
-    and triggers background processing of the PDF content.
+    Upload a new PDF document
     """
-    if not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Only PDF files are allowed"
-        )
-
     pool = request.app.state.db_pool
-    user = await get_user_by_id(pool, user_id)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
-        )
 
     try:
-        file_content = await file.read()
-
-        if len(file_content) == 0:
+        # Validate user ID
+        user = await get_user_by_id(pool, user_id)
+        if not user:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="Empty file uploaded"
+                status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
             )
 
-        try:
-            upload_result = await upload_pdf_to_cloudinary(file_content)
-            document_link = upload_result["secure_url"]
+        # Save file to Cloudinary
+        pdf_content = await file.read()
+        cloudinary_response = await upload_pdf_to_cloudinary(pdf_content, file.filename)
+        document_link = cloudinary_response.get("secure_url")
 
-        except Exception as cloud_error:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Error uploading to cloud storage: {str(cloud_error)}",
-            )
+        # Create PDF record in database
+        pdf = await create_pdf(pool, title, description, document_link, user_id)
+        pdf_id = pdf["id"]
 
-        try:
-            pdf_data = await create_pdf(
-                pool=pool,
-                title=title,
-                description=description,
-                document_link=document_link,
-                user_id=user_id,
-            )
+        # Start background indexing job
+        background_tasks.add_task(index_pdf_document, pool, pdf_id, document_link)
 
-            # Start background processing of the PDF
-            background_tasks.add_task(
-                process_pdf_with_progress, pdf_data["id"], document_link, pool
-            )
+        print_info(f"PDF {pdf_id} uploaded and queued for processing")
 
-            print_info(f"PDF {pdf_data['id']} uploaded and queued for processing")
-            return pdf_data
-
-        except Exception as db_error:
-            print_error(db_error)
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Error saving to database: {str(db_error)}",
-            )
+        return pdf
 
     except HTTPException:
         raise
@@ -373,4 +345,27 @@ async def search_pdfs(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error performing search: {str(e)}",
+        )
+
+
+@router.get("/{pdf_id}/indexing-status")
+async def get_pdf_indexing_status_endpoint(
+    pdf_id: str, request: Request
+) -> Dict[str, Any]:
+    """
+    Get detailed indexing status for a PDF document
+    """
+    pool = request.app.state.db_pool
+
+    try:
+        # Use the background jobs system to get detailed status
+        status_info = await get_pdf_indexing_status(pool, pdf_id)
+
+        return status_info
+
+    except Exception as e:
+        print_error(f"Error getting indexing status: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving indexing status: {str(e)}",
         )

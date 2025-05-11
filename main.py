@@ -1,10 +1,13 @@
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 
-from database import get_connection, close_connection, initialize_database
+from database import (
+    get_connection,
+    close_connection,
+    initialize_database,
+)
 from api import api_router
 from utils.colorLogger import (
     print_info,
@@ -28,7 +31,6 @@ async def lifespan(app: FastAPI):
 
         app.state.db_pool = db_pool
         print_info("Database initialized")
-
         yield
     except Exception as e:
         print_error(f"Error during startup: {e}")

@@ -4,6 +4,7 @@ from .connection import (
     POOL_CONFIG,
     MAX_RETRIES,
     RETRY_DELAY,
+    create_db_pool,
 )
 
 from .models import (
@@ -24,6 +25,7 @@ from .models import (
 __all__ = [
     "get_connection",
     "close_connection",
+    "create_db_pool",
     "POOL_CONFIG",
     "MAX_RETRIES",
     "RETRY_DELAY",

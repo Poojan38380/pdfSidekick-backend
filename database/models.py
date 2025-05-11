@@ -15,7 +15,10 @@ CREATE TABLE IF NOT EXISTS public.Pdf (
     processing_progress FLOAT DEFAULT 0,
     total_pages INTEGER,
     extracted_content TEXT,
-    error_message TEXT
+    error_message TEXT,
+    indexing_step TEXT,
+    chunks_processed INTEGER,
+    embeddings_created INTEGER
 );
 """
 
@@ -168,6 +171,9 @@ async def update_pdf_processing_status(
     progress: float = None,
     total_pages: int = None,
     error_message: str = None,
+    indexing_step: str = None,
+    chunks_processed: int = None,
+    embeddings_created: int = None,
 ) -> Dict[str, Any]:
     """Update the processing status of a PDF"""
 
@@ -190,12 +196,27 @@ async def update_pdf_processing_status(
         params.append(error_message)
         param_count += 1
 
+    if indexing_step is not None:
+        query_parts.append(f", indexing_step = ${param_count}")
+        params.append(indexing_step)
+        param_count += 1
+
+    if chunks_processed is not None:
+        query_parts.append(f", chunks_processed = ${param_count}")
+        params.append(chunks_processed)
+        param_count += 1
+
+    if embeddings_created is not None:
+        query_parts.append(f", embeddings_created = ${param_count}")
+        params.append(embeddings_created)
+        param_count += 1
+
     query_parts.append(f" WHERE id = ${param_count}")
     params.append(pdf_id)
 
     query = (
         "".join(query_parts)
-        + " RETURNING id, processing_status, processing_progress, total_pages, error_message"
+        + " RETURNING id, processing_status, processing_progress, total_pages, error_message, indexing_step, chunks_processed, embeddings_created"
     )
 
     async with pool.acquire() as conn:

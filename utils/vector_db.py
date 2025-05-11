@@ -124,7 +124,17 @@ async def process_pdf_chunks_to_embeddings(
             return {"status": "no_chunks", "pdf_id": pdf_id, "chunks_processed": 0}
 
         # Update processing status
-        await update_pdf_processing_status(db_pool, pdf_id, "embedding", 80, None, None)
+        await update_pdf_processing_status(
+            db_pool,
+            pdf_id,
+            "embedding",
+            80,
+            None,
+            None,
+            "generating_embeddings",
+            len(chunks),
+            0,
+        )
 
         # Process chunks in batches to avoid rate limits
         batch_size = 4  # Smaller batch size for Hugging Face API
@@ -182,6 +192,9 @@ async def process_pdf_chunks_to_embeddings(
                 min(progress, 99),  # Cap at 99% until fully complete
                 None,
                 None,
+                "generating_embeddings",
+                total_chunks,
+                embeddings_created,
             )
 
             print_info(
@@ -200,6 +213,9 @@ async def process_pdf_chunks_to_embeddings(
                 None,
                 None,
                 "Failed to generate any embeddings",
+                "embedding_failed",
+                total_chunks,
+                0,
             )
             return {
                 "status": "failed",
@@ -215,9 +231,22 @@ async def process_pdf_chunks_to_embeddings(
                 100,
                 None,
                 f"Generated {embeddings_created}/{total_chunks} embeddings",
+                "embedding_partial",
+                total_chunks,
+                embeddings_created,
             )
         else:
-            await update_pdf_processing_status(db_pool, pdf_id, "completed", 100)
+            await update_pdf_processing_status(
+                db_pool,
+                pdf_id,
+                "completed",
+                100,
+                None,
+                None,
+                "embedding_completed",
+                total_chunks,
+                embeddings_created,
+            )
 
         print_info(
             f"Embedding generation completed for PDF {pdf_id}: {embeddings_created}/{total_chunks} embeddings created"
@@ -240,6 +269,9 @@ async def process_pdf_chunks_to_embeddings(
             None,
             None,
             f"Embedding generation failed: {str(e)}",
+            "embedding_error",
+            None,
+            None,
         )
         raise
 
