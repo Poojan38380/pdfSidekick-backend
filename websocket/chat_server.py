@@ -32,7 +32,9 @@ class ChatManager:
                 try:
                     await connection.send_json(message)
                 except Exception as e:
-                    print_error(f"Error broadcasting message: {e}")
+                    print_error(
+                        f"Error broadcasting message (in broadcast_to_pdf): {e}"
+                    )
                     await self.disconnect(connection, pdf_id)
 
 
@@ -74,7 +76,7 @@ async def handle_chat_message(websocket: WebSocket, pdf_id: str, message: str):
         await websocket.send_json(assistant_message)
 
     except Exception as e:
-        print_error(f"Error handling chat message: {e}")
+        print_error(f"Error handling chat message (in handle_chat_message): {e}")
         error_message = {
             "id": str(uuid.uuid4()),
             "content": "Sorry, I encountered an error processing your message.",
@@ -92,7 +94,8 @@ async def chat_websocket_endpoint(websocket: WebSocket, pdf_id: str):
             message_data = json.loads(data)
             await handle_chat_message(websocket, pdf_id, message_data["content"])
     except WebSocketDisconnect:
+        print_info(f"WebSocket disconnected for PDF {pdf_id}")
         chat_manager.disconnect(websocket, pdf_id)
     except Exception as e:
-        print_error(f"WebSocket error: {e}")
+        print_error(f"WebSocket error (in chat_websocket_endpoint): {e}")
         chat_manager.disconnect(websocket, pdf_id)

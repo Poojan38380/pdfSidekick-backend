@@ -57,14 +57,3 @@ async def close_connection(pool: Optional[asyncpg.Pool]) -> None:
         except Exception as e:
             print_error(f"Error closing database connection pool: {e}")
             raise
-
-
-async def create_db_pool() -> Optional[asyncpg.Pool]:
-    """
-    Create and return a database connection pool.
-    This is an alias for get_connection for compatibility.
-
-    Returns:
-        Optional[asyncpg.Pool]: Database connection pool or None if connection fails
-    """
-    return await get_connection()

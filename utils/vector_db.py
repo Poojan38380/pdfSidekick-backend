@@ -38,7 +38,7 @@ async def generate_embedding(
 
         return await hf_client.get_embedding(text, model)
     except Exception as e:
-        print_error(f"Error generating embedding: {e}")
+        print_error(f"Error generating embedding (in generate_embedding): {e}")
         raise
 
 
@@ -66,23 +66,17 @@ async def generate_embeddings_batch(
         batch_size = 4  # Reduced batch size to prevent timeouts
         all_embeddings = []
 
-        print_info(
-            f"Generating embeddings for {len(valid_texts)} texts in batches of {batch_size}"
-        )
-
         for i in range(0, len(valid_texts), batch_size):
             batch = valid_texts[i : i + batch_size]
-            print_info(
-                f"Processing batch {i//batch_size + 1}/{(len(valid_texts) + batch_size - 1)//batch_size}"
-            )
 
             # Generate embeddings for the batch
             try:
                 batch_embeddings = await hf_client.get_embeddings_batch(batch, model)
                 all_embeddings.extend(batch_embeddings)
-                print_info(f"Successfully processed batch {i//batch_size + 1}")
             except Exception as e:
-                print_error(f"Error in batch {i//batch_size + 1}: {e}")
+                print_error(
+                    f"Error in batch {i//batch_size + 1} (in generate_embeddings_batch): {e}"
+                )
                 # Continue with next batch instead of failing completely
                 continue
 
@@ -91,7 +85,9 @@ async def generate_embeddings_batch(
 
         return all_embeddings
     except Exception as e:
-        print_error(f"Error generating batch embeddings: {e}")
+        print_error(
+            f"Error generating batch embeddings (in generate_embeddings_batch): {e}"
+        )
         raise
 
 
@@ -141,17 +137,9 @@ async def process_pdf_chunks_to_embeddings(
         total_chunks = len(chunks)
         embeddings_created = 0
 
-        print_info(
-            f"Starting embedding generation for {total_chunks} chunks from PDF {pdf_id}"
-        )
-
         for i in range(0, total_chunks, batch_size):
             batch_chunks = chunks[i : i + batch_size]
             texts = [chunk["content"] for chunk in batch_chunks]
-
-            print_info(
-                f"Processing batch {i//batch_size + 1}/{(total_chunks + batch_size - 1)//batch_size}"
-            )
 
             try:
                 # Generate embeddings for the batch
@@ -174,12 +162,12 @@ async def process_pdf_chunks_to_embeddings(
                         embeddings_created += 1
                     except Exception as db_error:
                         print_error(
-                            f"Error storing embedding for chunk {chunk['id']}: {db_error}"
+                            f"Error storing embedding for chunk {chunk['id']} (in process_pdf_chunks_to_embeddings): {db_error}"
                         )
                         continue
             except Exception as batch_error:
                 print_error(
-                    f"Error processing batch {i//batch_size + 1}: {batch_error}"
+                    f"Error processing batch {i//batch_size + 1} (in process_pdf_chunks_to_embeddings): {batch_error}"
                 )
                 continue
 
@@ -195,10 +183,6 @@ async def process_pdf_chunks_to_embeddings(
                 "generating_embeddings",
                 total_chunks,
                 embeddings_created,
-            )
-
-            print_info(
-                f"Progress: {min(progress, 99):.1f}% - Created {embeddings_created}/{total_chunks} embeddings"
             )
 
             # Small delay to avoid overwhelming the API
@@ -260,7 +244,9 @@ async def process_pdf_chunks_to_embeddings(
         }
 
     except Exception as e:
-        print_error(f"Error processing PDF chunks to embeddings: {e}")
+        print_error(
+            f"Error processing PDF chunks to embeddings (in process_pdf_chunks_to_embeddings): {e}"
+        )
         # Update status to failed
         await update_pdf_processing_status(
             db_pool,
@@ -310,5 +296,5 @@ async def semantic_search(
         return results
 
     except Exception as e:
-        print_error(f"Error performing semantic search: {e}")
+        print_error(f"Error performing semantic search (in semantic_search): {e}")
         raise

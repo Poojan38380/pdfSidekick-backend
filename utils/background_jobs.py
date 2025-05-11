@@ -160,7 +160,7 @@ async def index_pdf_document(
         )
 
     except Exception as e:
-        error_msg = f"Error indexing PDF {pdf_id}: {str(e)}\n{traceback.format_exc()}"
+        error_msg = f"Error indexing PDF {pdf_id} (in index_pdf_document): {str(e)}\n{traceback.format_exc()}"
         print_error(error_msg)
 
         # Update status to failed

@@ -53,7 +53,7 @@ async def upload_pdf_to_cloudinary(
 
         return response
     except Exception as e:
-        print_error(f"Error uploading to Cloudinary: {e}")
+        print_error(f"Error uploading to Cloudinary (in upload_pdf_to_cloudinary): {e}")
         raise
 
 
@@ -72,5 +72,5 @@ async def delete_pdf_from_cloudinary(public_id):
         deletion_result = cloudinary.uploader.destroy(public_id, resource_type="raw")
         return deletion_result
     except Exception as e:
-        print_error(e)
+        print_error(f"Error deleting from Cloudinary (in delete_pdf_from_cloudinary): {e}")
         raise Exception(f"Cloudinary deletion failed: {str(e)}")

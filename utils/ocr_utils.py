@@ -43,7 +43,7 @@ async def perform_ocr_on_pdf(pdf_content: bytes) -> Dict[int, str]:
             return page_texts
 
     except Exception as e:
-        print_error(f"Error performing OCR on PDF: {e}")
+        print_error(f"Error performing OCR on PDF (in perform_ocr_on_pdf): {e}")
         raise
 
 
@@ -96,6 +96,6 @@ async def extract_text_with_ocr_fallback(
             return extracted_text
 
     except Exception as e:
-        print_error(f"Error in OCR fallback: {e}")
+        print_error(f"Error in OCR fallback (in extract_text_with_ocr_fallback): {e}")
         # Return original extraction results if OCR fails
         return extracted_text
