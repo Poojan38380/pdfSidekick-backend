@@ -10,7 +10,6 @@ from fastapi import (
     Query,
 )
 from typing import Dict, Any, List
-import uuid
 from database import (
     get_pdfs_by_user_id,
     get_pdf_by_id,
@@ -26,7 +25,6 @@ from utils.pdf_processor import process_pdf_with_progress
 from utils.vector_db import semantic_search, process_pdf_chunks_to_embeddings
 from utils.background_jobs import index_pdf_document, get_pdf_indexing_status
 
-# Configure logging
 
 router = APIRouter()
 
@@ -72,7 +70,7 @@ async def create_new_pdf(
     except HTTPException:
         raise
     except Exception as e:
-        print_error(e)
+        print_error(f"Error uploading PDF (in create_new_pdf): {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error uploading PDF: {str(e)}",
@@ -96,7 +94,7 @@ async def get_user_pdfs(user_id: str, request: Request) -> List[Dict[str, Any]]:
         pdfs = await get_pdfs_by_user_id(pool, user_id)
         return pdfs
     except Exception as e:
-        print_error(e)
+        print_error(f"Error retrieving PDFs (in get_user_pdfs): {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error retrieving PDFs: {str(e)}",
@@ -120,9 +118,10 @@ async def get_pdf_details(pdf_id: str, request: Request) -> Dict[str, Any]:
 
         return pdf
     except HTTPException:
+        print_error(f"HTTPException in get_pdf_details: {e}")
         raise
     except Exception as e:
-        print_error(e)
+        print_error(f"Error retrieving PDF (in get_pdf_details): {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error retrieving PDF: {str(e)}",
@@ -164,9 +163,10 @@ async def get_pdf_text_chunks(pdf_id: str, request: Request) -> List[Dict[str, A
         return chunks
 
     except HTTPException:
+        print_error(f"HTTPException in get_pdf_text_chunks: {e}")
         raise
     except Exception as e:
-        print_error(e)
+        print_error(f"Error retrieving PDF chunks (in get_pdf_text_chunks): {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error retrieving PDF chunks: {str(e)}",
@@ -198,9 +198,12 @@ async def get_pdf_processing_status(pdf_id: str, request: Request) -> Dict[str, 
         }
 
     except HTTPException:
+        print_error(f"HTTPException in get_pdf_processing_status: {e}")
         raise
     except Exception as e:
-        print_error(e)
+        print_error(
+            f"Error retrieving pdf processing status (in get_pdf_processing_status): {str(e)}"
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error retrieving processing status: {str(e)}",
@@ -244,9 +247,10 @@ async def reprocess_pdf(
         }
 
     except HTTPException:
+        print_error(f"HTTPException in reprocess_pdf: {e}")
         raise
     except Exception as e:
-        print_error(e)
+        print_error(f"Error reprocessing PDF (in reprocess_pdf): {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error reprocessing PDF: {str(e)}",
@@ -298,9 +302,12 @@ async def generate_pdf_embeddings(
         }
 
     except HTTPException:
+        print_error(f"HTTPException in generate_pdf_embeddings: {e}")
         raise
     except Exception as e:
-        print_error(e)
+        print_error(
+            f"Error generating embeddings (in generate_pdf_embeddings): {str(e)}"
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error generating embeddings: {str(e)}",
@@ -341,7 +348,7 @@ async def search_pdfs(
         return {"query": query, "results": search_results, "count": len(search_results)}
 
     except Exception as e:
-        print_error(f"Error performing search: {e}")
+        print_error(f"Error performing search (in search_pdfs): {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error performing search: {str(e)}",
@@ -364,7 +371,9 @@ async def get_pdf_indexing_status_endpoint(
         return status_info
 
     except Exception as e:
-        print_error(f"Error getting indexing status: {e}")
+        print_error(
+            f"Error getting indexing status (in get_pdf_indexing_status_endpoint): {str(e)}"
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error retrieving indexing status: {str(e)}",

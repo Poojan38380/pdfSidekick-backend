@@ -27,7 +27,7 @@ async def download_pdf_from_cloudinary(url: str) -> bytes:
                     raise Exception(f"Failed to download PDF: HTTP {response.status}")
                 return await response.read()
     except Exception as e:
-        print_error(f"Error downloading PDF: {e}")
+        print_error(f"Error downloading PDF (in download_pdf_from_cloudinary): {e}")
         raise
 
 
@@ -81,7 +81,7 @@ async def extract_text_from_pdf(pdf_content: bytes) -> Tuple[str, int, Dict[int,
         return full_text, total_pages, page_texts
 
     except Exception as e:
-        print_error(f"Error extracting text from PDF: {e}")
+        print_error(f"Error extracting text from PDF (in extract_text_from_pdf): {e}")
         # Clean up the temporary file if it exists
         if "temp_path" in locals():
             try:
@@ -117,7 +117,7 @@ async def chunk_text(
         return chunks
 
     except Exception as e:
-        print_error(f"Error chunking text: {e}")
+        print_error(f"Error chunking text (in chunk_text): {e}")
         raise
 
 
@@ -157,7 +157,7 @@ async def process_pdf(
         }
 
     except Exception as e:
-        print_error(f"Error processing PDF: {e}")
+        print_error(f"Error processing PDF (in process_pdf): {e}")
         raise
 
 
@@ -232,7 +232,9 @@ async def process_pdf_with_progress(
             print_info(f"Starting embedding generation for PDF {pdf_id}")
             await process_pdf_chunks_to_embeddings(db_pool, pdf_id)
         except Exception as embed_error:
-            print_error(f"Error generating embeddings for PDF {pdf_id}: {embed_error}")
+            print_error(
+                f"Error generating embeddings for PDF {pdf_id} (in process_pdf_with_progress): {embed_error}"
+            )
             # Continue processing even if embedding fails
             # The PDF is still usable without embeddings
             await update_pdf_processing_status(
@@ -250,7 +252,9 @@ async def process_pdf_with_progress(
         print_info(f"PDF processing completed for PDF {pdf_id}")
 
     except Exception as e:
-        print_error(f"Error processing PDF {pdf_id}: {e}")
+        print_error(
+            f"Error processing PDF {pdf_id} (in process_pdf_with_progress): {e}"
+        )
         # Update status to failed
         await update_pdf_processing_status(
             db_pool, pdf_id, "failed", None, None, str(e)

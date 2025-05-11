@@ -89,21 +89,24 @@ async def initialize_database(connection):
         # Create vector index
         await connection.execute(CREATE_PDF_EMBEDDINGS_INDEX)
     except Exception as e:
-        print(f"Error creating vector extension or index: {e}")
+        print(f"Error creating vector extension or index (in initialize_database): {e}")
 
 
 async def get_user_by_id(pool, user_id: str) -> Optional[Dict[str, Any]]:
     """Get a user by ID"""
-
-    async with pool.acquire() as conn:
-        user = await conn.fetchrow(
-            """
+    try:
+        async with pool.acquire() as conn:
+            user = await conn.fetchrow(
+                """
             SELECT * FROM public."User" WHERE id = $1
             """,
-            user_id,
-        )
+                user_id,
+            )
 
         return dict(user) if user else None
+    except Exception as e:
+        print(f"Error getting user by ID (in get_user_by_id): {e}")
+        raise
 
 
 # PDF model operations
@@ -112,56 +115,68 @@ async def create_pdf(
 ) -> Dict[str, Any]:
     """Create a new PDF document entry in the database"""
 
-    async with pool.acquire() as conn:
-        pdf = await conn.fetchrow(
-            """
+    try:
+        async with pool.acquire() as conn:
+            pdf = await conn.fetchrow(
+                """
             INSERT INTO public.Pdf (title, description, document_link, user_id, processing_status, processing_progress)
             VALUES ($1, $2, $3, $4, 'pending', 0)
             RETURNING id, created_at, updated_at, title, description, document_link, user_id, processing_status, processing_progress
             """,
-            title,
-            description,
-            document_link,
-            user_id,
-        )
+                title,
+                description,
+                document_link,
+                user_id,
+            )
 
         # Convert the record to a dict and ensure UUID is converted to string
         pdf_dict = dict(pdf)
         pdf_dict["id"] = str(pdf_dict["id"])
         return pdf_dict
+    except Exception as e:
+        print(f"Error creating PDF (in create_pdf): {e}")
+        raise
 
 
 async def get_pdfs_by_user_id(pool, user_id: str) -> List[Dict[str, Any]]:
     """Get all PDFs associated with a user"""
 
-    async with pool.acquire() as conn:
-        pdfs = await conn.fetch(
-            """
+    try:
+        async with pool.acquire() as conn:
+            pdfs = await conn.fetch(
+                """
             SELECT * FROM public.Pdf WHERE user_id = $1 ORDER BY created_at DESC
             """,
-            user_id,
-        )
+                user_id,
+            )
 
         # Convert records to dicts and ensure UUIDs are converted to strings
         return [dict(pdf, id=str(pdf["id"])) for pdf in pdfs]
+    except Exception as e:
+        print(f"Error getting PDFs by user ID (in get_pdfs_by_user_id): {e}")
+        raise
 
 
 async def get_pdf_by_id(pool, pdf_id: str) -> Optional[Dict[str, Any]]:
     """Get a PDF by ID"""
 
-    async with pool.acquire() as conn:
-        pdf = await conn.fetchrow(
-            """
+    try:
+        async with pool.acquire() as conn:
+            pdf = await conn.fetchrow(
+                """
             SELECT * FROM public.Pdf WHERE id = $1
             """,
-            pdf_id,
-        )
+                pdf_id,
+            )
 
         if pdf:
             pdf_dict = dict(pdf)
             pdf_dict["id"] = str(pdf_dict["id"])
             return pdf_dict
         return None
+    except Exception as e:
+        print(f"Error getting PDF by ID (in get_pdf_by_id): {e}")
+        raise
 
 
 async def update_pdf_processing_status(
@@ -177,56 +192,62 @@ async def update_pdf_processing_status(
 ) -> Dict[str, Any]:
     """Update the processing status of a PDF"""
 
-    query_parts = ["UPDATE public.Pdf SET processing_status = $1"]
-    params = [status]
-    param_count = 2
+    try:
+        query_parts = ["UPDATE public.Pdf SET processing_status = $1"]
+        params = [status]
+        param_count = 2
 
-    if progress is not None:
-        query_parts.append(f", processing_progress = ${param_count}")
-        params.append(progress)
-        param_count += 1
+        if progress is not None:
+            query_parts.append(f", processing_progress = ${param_count}")
+            params.append(progress)
+            param_count += 1
 
-    if total_pages is not None:
-        query_parts.append(f", total_pages = ${param_count}")
-        params.append(total_pages)
-        param_count += 1
+        if total_pages is not None:
+            query_parts.append(f", total_pages = ${param_count}")
+            params.append(total_pages)
+            param_count += 1
 
-    if error_message is not None:
-        query_parts.append(f", error_message = ${param_count}")
-        params.append(error_message)
-        param_count += 1
+        if error_message is not None:
+            query_parts.append(f", error_message = ${param_count}")
+            params.append(error_message)
+            param_count += 1
 
-    if indexing_step is not None:
-        query_parts.append(f", indexing_step = ${param_count}")
-        params.append(indexing_step)
-        param_count += 1
+        if indexing_step is not None:
+            query_parts.append(f", indexing_step = ${param_count}")
+            params.append(indexing_step)
+            param_count += 1
 
-    if chunks_processed is not None:
-        query_parts.append(f", chunks_processed = ${param_count}")
-        params.append(chunks_processed)
-        param_count += 1
+        if chunks_processed is not None:
+            query_parts.append(f", chunks_processed = ${param_count}")
+            params.append(chunks_processed)
+            param_count += 1
 
-    if embeddings_created is not None:
-        query_parts.append(f", embeddings_created = ${param_count}")
-        params.append(embeddings_created)
-        param_count += 1
+        if embeddings_created is not None:
+            query_parts.append(f", embeddings_created = ${param_count}")
+            params.append(embeddings_created)
+            param_count += 1
 
-    query_parts.append(f" WHERE id = ${param_count}")
-    params.append(pdf_id)
+        query_parts.append(f" WHERE id = ${param_count}")
+        params.append(pdf_id)
 
-    query = (
-        "".join(query_parts)
-        + " RETURNING id, processing_status, processing_progress, total_pages, error_message, indexing_step, chunks_processed, embeddings_created"
-    )
+        query = (
+            "".join(query_parts)
+            + " RETURNING id, processing_status, processing_progress, total_pages, error_message, indexing_step, chunks_processed, embeddings_created"
+        )
 
-    async with pool.acquire() as conn:
-        pdf = await conn.fetchrow(query, *params)
+        async with pool.acquire() as conn:
+            pdf = await conn.fetchrow(query, *params)
 
-        if pdf:
-            pdf_dict = dict(pdf)
-            pdf_dict["id"] = str(pdf_dict["id"])
-            return pdf_dict
-        return None
+            if pdf:
+                pdf_dict = dict(pdf)
+                pdf_dict["id"] = str(pdf_dict["id"])
+                return pdf_dict
+            return None
+    except Exception as e:
+        print(
+            f"Error updating PDF processing status (in update_pdf_processing_status): {e}"
+        )
+        raise
 
 
 async def update_pdf_extracted_content(

@@ -38,7 +38,7 @@ async def generate_embedding(
 
         return await hf_client.get_embedding(text, model)
     except Exception as e:
-        print_error(f"Error generating embedding: {e}")
+        print_error(f"Error generating embedding (in generate_embedding): {e}")
         raise
 
 
@@ -82,7 +82,9 @@ async def generate_embeddings_batch(
                 all_embeddings.extend(batch_embeddings)
                 print_info(f"Successfully processed batch {i//batch_size + 1}")
             except Exception as e:
-                print_error(f"Error in batch {i//batch_size + 1}: {e}")
+                print_error(
+                    f"Error in batch {i//batch_size + 1} (in generate_embeddings_batch): {e}"
+                )
                 # Continue with next batch instead of failing completely
                 continue
 
@@ -91,7 +93,9 @@ async def generate_embeddings_batch(
 
         return all_embeddings
     except Exception as e:
-        print_error(f"Error generating batch embeddings: {e}")
+        print_error(
+            f"Error generating batch embeddings (in generate_embeddings_batch): {e}"
+        )
         raise
 
 
@@ -174,12 +178,12 @@ async def process_pdf_chunks_to_embeddings(
                         embeddings_created += 1
                     except Exception as db_error:
                         print_error(
-                            f"Error storing embedding for chunk {chunk['id']}: {db_error}"
+                            f"Error storing embedding for chunk {chunk['id']} (in process_pdf_chunks_to_embeddings): {db_error}"
                         )
                         continue
             except Exception as batch_error:
                 print_error(
-                    f"Error processing batch {i//batch_size + 1}: {batch_error}"
+                    f"Error processing batch {i//batch_size + 1} (in process_pdf_chunks_to_embeddings): {batch_error}"
                 )
                 continue
 
@@ -260,7 +264,9 @@ async def process_pdf_chunks_to_embeddings(
         }
 
     except Exception as e:
-        print_error(f"Error processing PDF chunks to embeddings: {e}")
+        print_error(
+            f"Error processing PDF chunks to embeddings (in process_pdf_chunks_to_embeddings): {e}"
+        )
         # Update status to failed
         await update_pdf_processing_status(
             db_pool,
@@ -310,5 +316,5 @@ async def semantic_search(
         return results
 
     except Exception as e:
-        print_error(f"Error performing semantic search: {e}")
+        print_error(f"Error performing semantic search (in semantic_search): {e}")
         raise

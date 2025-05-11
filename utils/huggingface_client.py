@@ -82,8 +82,14 @@ class AsyncHuggingFaceClient:
                     return await response.json()
         except asyncio.TimeoutError:
             print_error("Request timed out, retrying...")
+            print_error(
+                f"Error making request to Hugging Face API (in _make_request): {e}"
+            )
             raise tenacity.TryAgain()
         except Exception as e:
+            print_error(
+                f"Error making request to Hugging Face API (in _make_request): {e}"
+            )
             if isinstance(e, tenacity.TryAgain):
                 raise
             print_error(f"Request failed: {str(e)}")
@@ -124,7 +130,7 @@ class AsyncHuggingFaceClient:
 
             return result
         except Exception as e:
-            print_error(f"Error getting embedding: {str(e)}")
+            print_error(f"Error getting embedding (in get_embedding): {str(e)}")
             raise
 
     async def get_embeddings_batch(
@@ -194,7 +200,9 @@ class AsyncHuggingFaceClient:
             return all_embeddings
 
         except Exception as e:
-            print_error(f"Error getting batch embeddings: {str(e)}")
+            print_error(
+                f"Error getting batch embeddings (in get_embeddings_batch): {str(e)}"
+            )
             raise
 
     async def normalize_embeddings(

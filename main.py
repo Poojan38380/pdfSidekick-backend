@@ -20,19 +20,15 @@ from utils.colorLogger import (
 )
 from websocket.chat_server import chat_websocket_endpoint
 
-# Store server start time
 start_time = time.time()
 
 
-# Define lifespan event handlers for startup and shutdown
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: Initialize database
     try:
         print_info("Starting application")
         db_pool = await get_connection()
 
-        # Initialize database with tables
         await initialize_database(db_pool)
 
         app.state.db_pool = db_pool
@@ -40,16 +36,13 @@ async def lifespan(app: FastAPI):
         yield
     except Exception as e:
         print_error(f"Error during startup: {e}")
-        # Re-raise the exception to halt the startup process
         raise
     finally:
-        # Shutdown: Close DB connections
         print_info("Shutting down application")
         if hasattr(app.state, "db_pool"):
             await close_connection(app.state.db_pool)
 
 
-# Create FastAPI application
 app = FastAPI(
     title="PDFSideKick API",
     description="API for PDFSideKick backend",
@@ -58,7 +51,6 @@ app = FastAPI(
 )
 
 
-# Configure CORS
 origins = [
     "http://localhost:3000",  # Frontend development server
     "http://localhost:8000",  # Backend development server
@@ -73,34 +65,30 @@ app.add_middleware(
 )
 
 
-# Dependency to get database connection from request
 async def get_db_from_request(request: Request):
     return request.app.state.db_pool
 
 
-# Include API routes
 app.include_router(api_router, prefix="/api")
 
 
-# Root endpoint
 @app.get("/")
 async def root():
     return {"message": "Welcome to PDFSideKick API"}
 
 
-# Health check endpoint
 @app.get("/health")
 async def health_check(request: Request):
     current_time = time.time()
     uptime_seconds = current_time - start_time
 
-    # Check database connection
     db_status = "healthy"
     try:
         db_pool = request.app.state.db_pool
         async with db_pool.acquire() as conn:
             await conn.execute("SELECT 1")
     except Exception as e:
+        print_error(f"Error during health check (in health_check): {e}")
         db_status = f"unhealthy: {str(e)}"
 
     return {
