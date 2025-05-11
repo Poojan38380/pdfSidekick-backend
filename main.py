@@ -1,5 +1,5 @@
 import uvicorn
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import time
@@ -18,6 +18,7 @@ from utils.colorLogger import (
     get_user_input,
     print_header,
 )
+from websocket.chat_server import chat_websocket_endpoint
 
 # Store server start time
 start_time = time.time()
@@ -109,6 +110,11 @@ async def health_check(request: Request):
         "uptime_seconds": uptime_seconds,
         "database": db_status,
     }
+
+
+@app.websocket("/ws/chat/{pdf_id}")
+async def websocket_endpoint(websocket: WebSocket, pdf_id: str):
+    await chat_websocket_endpoint(websocket, pdf_id)
 
 
 if __name__ == "__main__":
