@@ -4,27 +4,30 @@ import asyncio
 import numpy as np
 from dotenv import load_dotenv
 from utils.colorLogger import print_info, print_error
-from utils.langchain_client import LangChainEmbeddingClient, DEFAULT_EMBEDDING_MODEL
+from utils.local_embedding_client import (
+    LocalEmbeddingClient,
+    DEFAULT_LOCAL_EMBEDDING_MODEL,
+)
 
 # Load environment variables
 load_dotenv()
 
-# Initialize the LangChain client
-embedding_client = LangChainEmbeddingClient()
+# Initialize the Local Embedding client
+embedding_client = LocalEmbeddingClient()
 
 
 async def generate_embedding(
-    text: str, model: str = DEFAULT_EMBEDDING_MODEL
+    text: str, model: str = DEFAULT_LOCAL_EMBEDDING_MODEL
 ) -> List[float]:
     """
-    Generate an embedding for the given text using LangChain
+    Generate an embedding for the given text using local embedding model
 
     Args:
         text: The text to generate an embedding for
         model: The embedding model to use
 
     Returns:
-        List of floats representing the embedding vector
+        List of floats representing the embedding vector (1536 dimensions)
     """
     try:
         if not text or len(text.strip()) == 0:
@@ -38,7 +41,7 @@ async def generate_embedding(
 
 
 async def generate_embeddings_batch(
-    texts: List[str], model: str = DEFAULT_EMBEDDING_MODEL
+    texts: List[str], model: str = DEFAULT_LOCAL_EMBEDDING_MODEL
 ) -> List[List[float]]:
     """
     Generate embeddings for multiple texts in a batch
@@ -48,7 +51,7 @@ async def generate_embeddings_batch(
         model: The embedding model to use
 
     Returns:
-        List of embedding vectors
+        List of embedding vectors (each with 1536 dimensions)
     """
     try:
         # Filter out empty texts
@@ -58,7 +61,7 @@ async def generate_embeddings_batch(
             return []
 
         # Process in smaller batches to avoid memory issues
-        batch_size = 32  # LangChain can handle larger batches
+        batch_size = 32  # Adjust based on available memory
         all_embeddings = []
 
         for i in range(0, len(valid_texts), batch_size):
@@ -87,7 +90,7 @@ async def generate_embeddings_batch(
 
 
 async def process_pdf_chunks_to_embeddings(
-    db_pool, pdf_id: str, model: str = DEFAULT_EMBEDDING_MODEL
+    db_pool, pdf_id: str, model: str = DEFAULT_LOCAL_EMBEDDING_MODEL
 ) -> Dict[str, Any]:
     """
     Process all chunks of a PDF and generate embeddings

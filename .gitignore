@@ -11,3 +11,5 @@ createdData
 uploads/
 
 
+*.model_cache
+*.embedding_cache
