@@ -4,7 +4,6 @@ PDFSidekick is a full-stack application that allows users to upload PDF document
 
 ![PDFSidekick Banner](public/logo-1500x300.png)
 
-
 ## Features
 
 - PDF document uploading and storage
@@ -79,6 +78,140 @@ python main.py
 
 The API will be available at `http://localhost:8000`.
 
+## Architecture
+
+### High-Level Design
+
+PDFSidekick follows a modern, service-oriented architecture that separates concerns and promotes maintainability:
+
+```
+┌───────────────┐     ┌───────────────┐     ┌───────────────┐
+│   Client App  │ ◄─► │   FastAPI     │ ◄─► │   Database    │
+│   (Frontend)  │     │   Backend     │     │  (PostgreSQL) │
+└───────────────┘     └───────┬───────┘     └───────────────┘
+                              │
+                              │
+                  ┌───────────┴───────────┐
+                  │                       │
+         ┌────────▼──────┐       ┌────────▼──────┐
+         │   File Storage│       │  NLP Pipeline │
+         │  (Cloudinary) │       │ (Transformers)│
+         └───────────────┘       └───────────────┘
+```
+
+The architecture is designed around these core flows:
+
+1. **Document Processing Flow**: PDF → Text Extraction → Chunking → Embedding Generation → Storage
+2. **Query Processing Flow**: User Question → Context Retrieval → LLM Processing → Answer Generation
+3. **Real-time Communication Flow**: WebSocket Connection → Question Processing → Streaming Response
+
+### Low-Level Design
+
+The codebase is organized into several key components that work together:
+
+#### Core Components and Interactions
+
+1. **API Layer** (`api/`)
+
+   - `pdfs.py`: Handles all PDF-related endpoints including upload, retrieval, and search
+   - Manages request validation, error handling, and response formatting
+   - Delegates business logic to utility modules
+
+2. **Database Layer** (`database/`)
+
+   - Provides async database connection pool
+   - Implements data access methods for PDFs, chunks, users, and embeddings
+   - Handles transaction management and connection lifecycle
+
+3. **PDF Processing Pipeline** (`utils/pdf_processor.py`)
+
+   - Extracts text from PDFs using PyPDF2
+   - Applies OCR for image-based content using pytesseract
+   - Chunks extracted text into manageable segments
+   - Updates processing status in real-time
+
+4. **Vector Database** (`utils/vector_db.py`)
+
+   - Manages creation and storage of document embeddings
+   - Performs semantic search using similarity metrics
+   - Optimizes search results based on relevance
+
+5. **LLM Client** (`utils/llm_client.py`)
+
+   - Interfaces with Hugging Face transformer models
+   - Manages context window and token limits
+   - Generates coherent answers based on retrieved context
+   - Handles model loading and optimization
+
+6. **Background Processing** (`utils/background_jobs.py`)
+
+   - Manages asynchronous PDF processing tasks
+   - Handles embedding generation
+   - Updates processing status and progress
+
+7. **WebSocket Server** (`websocket/chat_server.py`)
+
+   - Manages real-time chat connections
+   - Processes incoming questions
+   - Streams answers back to clients
+
+8. **File Storage** (`utils/cloudinary_utils.py`)
+   - Handles PDF uploads to Cloudinary
+   - Manages file metadata and access URLs
+
+#### Data Flow
+
+The sequence of operations for a typical user interaction:
+
+1. **PDF Upload**:
+
+   ```
+   Client → API (pdfs.py) → Cloudinary Storage → Database → Background Processing
+   ```
+
+2. **Document Processing**:
+
+   ```
+   Background Job → PDF Processor → Text Extraction → Chunking → Vector DB → Database
+   ```
+
+3. **Question Answering**:
+   ```
+   Client WebSocket → Chat Server → Vector DB (Context Retrieval) → LLM Client (Answer Generation) → Client
+   ```
+
+#### Class Relationships
+
+Key class interactions:
+
+- `LLMClient`: Interfaces with transformer models to generate answers based on context
+- `PDFProcessor`: Extracts and processes text from uploaded documents
+- `VectorDB`: Manages embeddings and semantic search functionality
+
+#### Code Organization
+
+```
+pdfsidekick-backend/
+├── api/                  # API endpoints
+├── database/             # Database access and models
+├── schemas/              # Pydantic models for validation
+├── utils/                # Utility modules
+│   ├── llm_client.py     # LLM interaction
+│   ├── pdf_processor.py  # PDF processing pipeline
+│   ├── vector_db.py      # Vector database operations
+│   └── ...               # Other utilities
+├── websocket/            # WebSocket handlers
+├── main.py               # Application entry point
+└── requirements.txt      # Dependencies
+```
+
+This architecture allows for:
+
+- Clear separation of concerns
+- Independent scaling of components
+- Easy addition of new features
+- Maintainable and testable code structure
+
 ## API Endpoints
 
 ### PDF Management
@@ -97,9 +230,7 @@ The API will be available at `http://localhost:8000`.
 
 - `WS /ws/chat/{pdf_id}` - Real-time chat interface for asking questions about a PDF
 
-## Architecture
-
-### Core Components
+## Core Components
 
 1. **PDF Processor**: Extracts text from PDFs, applies OCR when needed, and chunks the text into manageable pieces.
 
@@ -122,3 +253,7 @@ For local development with custom embeddings, refer to the `utils/README_LOCAL_E
 ## Contact
 
 For questions or support, please create an issue in the repository.
+
+## Related Projects
+
+- [PDFSidekick Frontend](https://github.com/Poojan38380/pdfSidekick-frontend) - Frontend
