@@ -74,15 +74,23 @@ class LLMClient:
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
             # Initialize generation pipeline for efficiency
+            # When using device_map="auto", don't specify a device in the pipeline as it conflicts
+            pipeline_kwargs = {
+                "model": self.model,
+                "tokenizer": self.tokenizer,
+            }
+
+            # Only add device parameter if not using device_map="auto"
+            if device_map != "auto":
+                pipeline_kwargs["device"] = self.device
+
             self.generation_pipeline = pipeline(
                 (
                     "text2text-generation"
                     if "t5" in model_name.lower()
                     else "text-generation"
                 ),
-                model=self.model,
-                tokenizer=self.tokenizer,
-                device=self.device,
+                **pipeline_kwargs,
             )
 
             # Enable model optimization techniques
