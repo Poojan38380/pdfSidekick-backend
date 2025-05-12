@@ -1,6 +1,6 @@
 import os
 from typing import List, Dict, Any, Optional
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 from utils.colorLogger import print_info, print_error
 
 # Default embedding model - using a model specifically for embeddings/feature extraction

@@ -4,8 +4,12 @@ from typing import Dict, List, Optional
 import json
 from datetime import datetime
 import uuid
-from database.models import search_similar_chunks
+from utils.vector_db import semantic_search
 from utils.colorLogger import print_info, print_error
+from utils.llm_client import LLMClient, DEFAULT_LLM_MODEL
+
+# Initialize the LLM client
+llm_client = LLMClient()
 
 
 class ChatManager:
@@ -21,13 +25,15 @@ class ChatManager:
 
     def disconnect(self, websocket: WebSocket, pdf_id: str):
         if pdf_id in self.active_connections:
-            self.active_connections[pdf_id].remove(websocket)
+            if websocket in self.active_connections[pdf_id]:
+                self.active_connections[pdf_id].remove(websocket)
             if not self.active_connections[pdf_id]:
                 del self.active_connections[pdf_id]
         print_info(f"Chat connection closed for PDF {pdf_id}")
 
     async def broadcast_to_pdf(self, pdf_id: str, message: dict):
         if pdf_id in self.active_connections:
+            disconnected = []
             for connection in self.active_connections[pdf_id]:
                 try:
                     await connection.send_json(message)
@@ -35,13 +41,17 @@ class ChatManager:
                     print_error(
                         f"Error broadcasting message (in broadcast_to_pdf): {e}"
                     )
-                    await self.disconnect(connection, pdf_id)
+                    disconnected.append(connection)
+
+            # Clean up disconnected websockets after iteration
+            for conn in disconnected:
+                self.disconnect(conn, pdf_id)
 
 
 chat_manager = ChatManager()
 
 
-async def handle_chat_message(websocket: WebSocket, pdf_id: str, message: str):
+async def handle_chat_message(websocket: WebSocket, pdf_id: str, message: str, db_pool):
     try:
         # Generate a unique message ID
         message_id = str(uuid.uuid4())
@@ -55,14 +65,29 @@ async def handle_chat_message(websocket: WebSocket, pdf_id: str, message: str):
         }
         await websocket.send_json(user_message)
 
-        # Search for relevant chunks
-        similar_chunks = await search_similar_chunks(pdf_id, message, limit=3)
+        # Send a "thinking" message to indicate processing
+        thinking_message = {
+            "id": str(uuid.uuid4()),
+            "content": "Searching the document for relevant information...",
+            "sender": "assistant",
+            "timestamp": datetime.utcnow().isoformat(),
+            "is_thinking": True,
+        }
+        await websocket.send_json(thinking_message)
 
-        # Generate response based on similar chunks
+        # Search for relevant chunks using semantic search
+        search_results = await semantic_search(db_pool, message, limit=5, threshold=0.6)
+
+        # Filter results to only include chunks from the current PDF
+        similar_chunks = [
+            chunk for chunk in search_results if str(chunk.get("pdf_id", "")) == pdf_id
+        ]
+
+        # Generate response based on similar chunks using LLM
         if similar_chunks:
-            response_content = "Based on the document, here's what I found:\n\n"
-            for chunk in similar_chunks:
-                response_content += f"- {chunk['content']}\n\n"
+            # Use the LLM client to generate a proper answer
+            answer = await llm_client.generate_answer(message, similar_chunks)
+            response_content = answer
         else:
             response_content = "I couldn't find any relevant information in the document to answer your question."
 
@@ -86,13 +111,15 @@ async def handle_chat_message(websocket: WebSocket, pdf_id: str, message: str):
         await websocket.send_json(error_message)
 
 
-async def chat_websocket_endpoint(websocket: WebSocket, pdf_id: str):
+async def chat_websocket_endpoint(websocket: WebSocket, pdf_id: str, db_pool):
     await chat_manager.connect(websocket, pdf_id)
     try:
         while True:
             data = await websocket.receive_text()
             message_data = json.loads(data)
-            await handle_chat_message(websocket, pdf_id, message_data["content"])
+            await handle_chat_message(
+                websocket, pdf_id, message_data["content"], db_pool
+            )
     except WebSocketDisconnect:
         print_info(f"WebSocket disconnected for PDF {pdf_id}")
         chat_manager.disconnect(websocket, pdf_id)

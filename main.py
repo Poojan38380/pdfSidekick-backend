@@ -4,6 +4,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import time
 from datetime import datetime
+from dotenv import load_dotenv
+import os
+
+# Load environment variables first
+load_dotenv()
 
 from database import (
     get_connection,
@@ -27,6 +32,14 @@ start_time = time.time()
 async def lifespan(app: FastAPI):
     try:
         print_info("Starting application")
+
+        # Check if HF token is configured
+        hf_token = os.environ.get("HUGGINGFACEHUB_API_TOKEN")
+        if not hf_token:
+            print_error(
+                "HUGGINGFACEHUB_API_TOKEN environment variable not set. LLM will operate in fallback mode."
+            )
+
         db_pool = await get_connection()
 
         await initialize_database(db_pool)
@@ -102,7 +115,8 @@ async def health_check(request: Request):
 
 @app.websocket("/ws/chat/{pdf_id}")
 async def websocket_endpoint(websocket: WebSocket, pdf_id: str):
-    await chat_websocket_endpoint(websocket, pdf_id)
+    db_pool = app.state.db_pool
+    await chat_websocket_endpoint(websocket, pdf_id, db_pool)
 
 
 if __name__ == "__main__":
