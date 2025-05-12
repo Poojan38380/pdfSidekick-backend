@@ -2,6 +2,9 @@
 
 PDFSidekick is a full-stack application that allows users to upload PDF documents and ask questions regarding their content. The backend processes these documents and utilizes natural language processing to provide accurate answers to users' questions.
 
+![PDFSidekick Banner](public/logo-1500x300.png)
+
+
 ## Features
 
 - PDF document uploading and storage
