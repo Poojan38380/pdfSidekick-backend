@@ -1,28 +1,20 @@
 import os
 from typing import List, Dict, Any
-from langchain_huggingface import HuggingFaceEndpoint
+import torch
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 from langchain.prompts import PromptTemplate
 from utils.colorLogger import print_info, print_error
 from dotenv import load_dotenv
-from huggingface_hub import InferenceClient
-
 
 load_dotenv()
 
-HUGGINGFACE_API_TOKEN = os.getenv("HUGGINGFACEHUB_API_TOKEN")
-
-client = InferenceClient(
-    provider="hf-inference",
-    api_key=HUGGINGFACE_API_TOKEN,
-)
-
-# Updated default model to a more robust text generation model
-DEFAULT_LLM_MODEL = "bigscience/bloom-560m"
+# Updated to a well-supported model
+DEFAULT_LLM_MODEL = "google/flan-t5-base"
 
 
 class LLMClient:
     """
-    Client for handling LLM interactions using LangChain
+    Client for handling LLM interactions using HuggingFace Transformers directly
     """
 
     def __init__(self, model_name: str = DEFAULT_LLM_MODEL):
@@ -32,22 +24,17 @@ class LLMClient:
             model_name: The name of the LLM model to use
         """
         try:
-            # Validate API token
-            hf_api_token = HUGGINGFACE_API_TOKEN
-            if not hf_api_token:
-                raise ValueError("Missing Hugging Face API token")
+            # Initialize tokenizer and model directly
+            self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+            self.model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
 
-            # More robust model initialization with additional parameters
-            self.model = HuggingFaceEndpoint(
-                repo_id=model_name,
-                task="text-generation",  # Changed from text2text-generation
-                huggingfacehub_api_token=hf_api_token,
-                model_kwargs={},
-                do_sample=True,
-                temperature=0.7,
-                max_new_tokens=250,
+            # Use CUDA if available
+            self.device = "cuda" if torch.cuda.is_available() else "cpu"
+            self.model = self.model.to(self.device)
+
+            print_info(
+                f"Initialized LLM client with model: {model_name} on {self.device}"
             )
-            print_info(f"Initialized LLM client with model: {model_name}")
         except Exception as e:
             print_error(f"Error initializing LLM client: {str(e)}")
             raise
@@ -95,13 +82,27 @@ class LLMClient:
             # Format the prompt
             prompt = prompt_template.format(context=context, question=question)
 
-            # More robust response handling
-            response = client.chat.completions.create(
-                model="Qwen/Qwen3-235B-A22B",
-                messages=[{"role": "user", "content": prompt}],
-            )
+            # Generate with transformers directly
+            inputs = self.tokenizer(prompt, return_tensors="pt").to(self.device)
 
-            return response.choices[0].message.content
+            # Generate a response with safe parameters
+            with torch.no_grad():
+                outputs = self.model.generate(
+                    **inputs,
+                    max_length=250,
+                    temperature=0.7,
+                    num_return_sequences=1,
+                )
+
+            # Decode the response
+            response = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+
+            # Return the response
+            return (
+                response.strip()
+                if response
+                else "I couldn't generate an answer based on the provided context."
+            )
 
         except Exception as e:
             print_error(f"Error generating answer (in llm_client.py): {str(e)}")
