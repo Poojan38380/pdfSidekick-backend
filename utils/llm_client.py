@@ -4,11 +4,20 @@ from langchain_huggingface import HuggingFaceEndpoint
 from langchain.prompts import PromptTemplate
 from utils.colorLogger import print_info, print_error
 from dotenv import load_dotenv
+from huggingface_hub import InferenceClient
+
 
 load_dotenv()
 
-# Default LLM model - using a free model with Hugging Face Inference API
-DEFAULT_LLM_MODEL = "google/flan-t5-small"
+HUGGINGFACE_API_TOKEN = os.getenv("HUGGINGFACEHUB_API_TOKEN")
+
+client = InferenceClient(
+    provider="hf-inference",
+    api_key=HUGGINGFACE_API_TOKEN,
+)
+
+# Updated default model to a more robust text generation model
+DEFAULT_LLM_MODEL = "bigscience/bloom-560m"
 
 
 class LLMClient:
@@ -23,15 +32,24 @@ class LLMClient:
             model_name: The name of the LLM model to use
         """
         try:
-            # Use Hugging Face's hosted inference API - no local GPU required
+            # Validate API token
+            hf_api_token = HUGGINGFACE_API_TOKEN
+            if not hf_api_token:
+                raise ValueError("Missing Hugging Face API token")
+
+            # More robust model initialization with additional parameters
             self.model = HuggingFaceEndpoint(
                 repo_id=model_name,
-                task="text2text-generation",
-                max_length=512,
+                task="text-generation",  # Changed from text2text-generation
+                huggingfacehub_api_token=hf_api_token,
+                model_kwargs={},
+                do_sample=True,
+                temperature=0.7,
+                max_new_tokens=250,
             )
             print_info(f"Initialized LLM client with model: {model_name}")
         except Exception as e:
-            print_error(f"Error initializing LLM client: {e}")
+            print_error(f"Error initializing LLM client: {str(e)}")
             raise
 
     async def generate_answer(
@@ -77,10 +95,18 @@ class LLMClient:
             # Format the prompt
             prompt = prompt_template.format(context=context, question=question)
 
-            # Generate the answer
-            response = self.model.invoke(prompt)
-            return response.strip()
+            # More robust response handling
+            response = client.chat.completions.create(
+                model="Qwen/Qwen3-235B-A22B",
+                messages=[{"role": "user", "content": prompt}],
+            )
+
+            return response.choices[0].message.content
 
         except Exception as e:
-            print_error(f"Error generating answer (in llm_client.py): {e}")
+            print_error(f"Error generating answer (in llm_client.py): {str(e)}")
+            # More comprehensive error logging
+            import traceback
+
+            print_error(f"Detailed Traceback: {traceback.format_exc()}")
             return "I apologize, but I encountered an error while trying to answer your question. Please try again."
