@@ -4,29 +4,24 @@ import asyncio
 import numpy as np
 from dotenv import load_dotenv
 from utils.colorLogger import print_info, print_error
-from utils.huggingface_client import AsyncHuggingFaceClient, DEFAULT_EMBEDDING_MODEL
+from utils.langchain_client import LangChainEmbeddingClient, DEFAULT_EMBEDDING_MODEL
 
 # Load environment variables
 load_dotenv()
 
-# Get Hugging Face API token from environment
-HUGGINGFACEHUB_API_TOKEN = os.getenv("HUGGINGFACEHUB_API_TOKEN")
-if not HUGGINGFACEHUB_API_TOKEN:
-    print_error("HUGGINGFACEHUB_API_TOKEN not found in environment variables")
-
-# Initialize the Hugging Face client
-hf_client = AsyncHuggingFaceClient(api_token=HUGGINGFACEHUB_API_TOKEN)
+# Initialize the LangChain client
+embedding_client = LangChainEmbeddingClient()
 
 
 async def generate_embedding(
     text: str, model: str = DEFAULT_EMBEDDING_MODEL
 ) -> List[float]:
     """
-    Generate an embedding for the given text using Hugging Face's API
+    Generate an embedding for the given text using LangChain
 
     Args:
         text: The text to generate an embedding for
-        model: The Hugging Face embedding model to use
+        model: The embedding model to use
 
     Returns:
         List of floats representing the embedding vector
@@ -36,7 +31,7 @@ async def generate_embedding(
             print_error("Empty text provided for embedding generation")
             return []
 
-        return await hf_client.get_embedding(text, model)
+        return embedding_client.get_embedding(text)
     except Exception as e:
         print_error(f"Error generating embedding (in generate_embedding): {e}")
         raise
@@ -50,7 +45,7 @@ async def generate_embeddings_batch(
 
     Args:
         texts: List of texts to generate embeddings for
-        model: The Hugging Face embedding model to use
+        model: The embedding model to use
 
     Returns:
         List of embedding vectors
@@ -62,8 +57,8 @@ async def generate_embeddings_batch(
             print_error("No valid texts provided for batch embedding generation")
             return []
 
-        # Process in smaller batches to avoid overloading the API
-        batch_size = 4  # Reduced batch size to prevent timeouts
+        # Process in smaller batches to avoid memory issues
+        batch_size = 32  # LangChain can handle larger batches
         all_embeddings = []
 
         for i in range(0, len(valid_texts), batch_size):
@@ -71,7 +66,7 @@ async def generate_embeddings_batch(
 
             # Generate embeddings for the batch
             try:
-                batch_embeddings = await hf_client.get_embeddings_batch(batch, model)
+                batch_embeddings = embedding_client.get_embeddings_batch(batch)
                 all_embeddings.extend(batch_embeddings)
             except Exception as e:
                 print_error(
@@ -80,8 +75,8 @@ async def generate_embeddings_batch(
                 # Continue with next batch instead of failing completely
                 continue
 
-            # Add a small delay to avoid rate limiting
-            await asyncio.sleep(1.0)
+            # Add a small delay to avoid overwhelming the system
+            await asyncio.sleep(0.1)
 
         return all_embeddings
     except Exception as e:
@@ -132,8 +127,8 @@ async def process_pdf_chunks_to_embeddings(
             0,
         )
 
-        # Process chunks in batches to avoid rate limits
-        batch_size = 4  # Smaller batch size for Hugging Face API
+        # Process chunks in batches
+        batch_size = 32  # LangChain can handle larger batches
         total_chunks = len(chunks)
         embeddings_created = 0
 
@@ -185,8 +180,8 @@ async def process_pdf_chunks_to_embeddings(
                 embeddings_created,
             )
 
-            # Small delay to avoid overwhelming the API
-            await asyncio.sleep(1.0)
+            # Small delay to avoid overwhelming the system
+            await asyncio.sleep(0.1)
 
         # Update status based on how many embeddings were created
         if embeddings_created == 0:
