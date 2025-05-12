@@ -1,11 +1,14 @@
 import os
 from typing import List, Dict, Any
-from langchain_community.llms import HuggingFaceHub
+from langchain_huggingface import HuggingFaceEndpoint
 from langchain.prompts import PromptTemplate
 from utils.colorLogger import print_info, print_error
+from dotenv import load_dotenv
 
-# Default LLM model - using a model specifically for text generation
-DEFAULT_LLM_MODEL = "mistralai/Mistral-7B-Instruct-v0.2"
+load_dotenv()
+
+# Default LLM model - using a free model with Hugging Face Inference API
+DEFAULT_LLM_MODEL = "google/flan-t5-small"
 
 
 class LLMClient:
@@ -20,8 +23,11 @@ class LLMClient:
             model_name: The name of the LLM model to use
         """
         try:
-            self.model = HuggingFaceHub(
-                repo_id=model_name, model_kwargs={"temperature": 0.7, "max_length": 512}
+            # Use Hugging Face's hosted inference API - no local GPU required
+            self.model = HuggingFaceEndpoint(
+                repo_id=model_name,
+                task="text2text-generation",
+                max_length=512,
             )
             print_info(f"Initialized LLM client with model: {model_name}")
         except Exception as e:
